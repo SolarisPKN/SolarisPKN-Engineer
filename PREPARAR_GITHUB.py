@@ -18,7 +18,7 @@ DEST = ROOT / "dist" / "github-export" / "SolarisPKN-Engineer"
 
 PUBLIC_FILES = (
     ".gitignore",
-    "README.md", "README.en.md", "RELEASE_CHECKLIST.md",
+    "README.md", "README.es.md", "RELEASE_CHECKLIST.md",
     "INICIAR_ENGINEER.cmd", "COMPILAR_EXE.cmd", "VERIFICAR_REPO.cmd",
     "PREPARAR_GITHUB.cmd", "PREPARAR_GITHUB.py",
     "ai_analysis.py", "api_extensions.py", "authorized_unlock.py",
@@ -31,6 +31,13 @@ PUBLIC_FILES = (
     "pe_reader.py", "project_semantics.py", "resource_controls.py",
     "scope.py", "server.py", "static_imports.py", "tray_launcher.py",
     "visualizer.html", "web_dependencies.py", "workspace.py",
+)
+
+# Only reviewed user-provided screenshots may enter the public GitHub export.
+PUBLIC_SCREENSHOTS = (
+    "docs/screenshots/dependency-inspector.webp",
+    "docs/screenshots/folder-overview.webp",
+    "docs/screenshots/folder-node-map.webp",
 )
 
 EXCLUDE_PARTS = {
@@ -50,6 +57,8 @@ def eligible(rel: Path) -> bool:
         return False
     if any(rel.name.lower().endswith(ext) for ext in BANNED_SUFFIXES):
         return False
+    if rel.as_posix() in PUBLIC_SCREENSHOTS:
+        return len(parts) == 3 and rel.suffix.lower() == ".webp"
     if rel.parts[0] == "tests":
         return len(parts) == 2 and rel.suffix == ".py" and rel.name.startswith("test_")
     if rel.as_posix() in (".github/workflows/tests.yml", ".github/workflows/labs-scan.yml"):
@@ -59,6 +68,7 @@ def eligible(rel: Path) -> bool:
 
 def safe_sources() -> list[Path]:
     names = [Path(n) for n in PUBLIC_FILES]
+    names.extend(Path(n) for n in PUBLIC_SCREENSHOTS)
     names.extend([Path(".github/workflows/tests.yml"),
                   Path(".github/workflows/labs-scan.yml")])
     names.extend(
@@ -66,7 +76,8 @@ def safe_sources() -> list[Path]:
         for p in (ROOT / "tests").glob("test_*.py")
         if p.is_file() and not p.is_symlink()
     )
-    missing = [str(name) for name in PUBLIC_FILES if not (ROOT / name).is_file()]
+    missing = [str(name) for name in (*PUBLIC_FILES, *PUBLIC_SCREENSHOTS)
+               if not (ROOT / name).is_file()]
     if missing:
         raise RuntimeError("Faltan fuentes públicas requeridas: " + ", ".join(missing))
     for path in names:
