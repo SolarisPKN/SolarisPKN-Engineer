@@ -1,0 +1,68 @@
+name: Public SolarisPKN-Labs scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - labs_public_example.py
+      - .github/workflows/labs-scan.yml
+
+permissions:
+  contents: write
+
+jobs:
+  generate-public-example:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout SolarisPKN-Engineer
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Checkout public SolarisPKN-Labs
+        uses: actions/checkout@v4
+        with:
+          repository: SolarisPKN/SolarisPKN-Labs
+          path: .public-labs
+          persist-credentials: false
+      - name: Install Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build sanitized dependency scan without executing Labs
+        run: python labs_public_example.py --checkout .public-labs --output ejemplos/SolarisPKN-Labs
+      - name: Enforce four-file publication allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find ejemplos/SolarisPKN-Labs -type f | wc -l)" -eq 4
+          test -f ejemplos/SolarisPKN-Labs/mapa.json
+          test -f ejemplos/SolarisPKN-Labs/mapa.html
+          test -f ejemplos/SolarisPKN-Labs/diagnostico-relaciones.json
+          test -f ejemplos/SolarisPKN-Labs/README.md
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("ejemplos/SolarisPKN-Labs/mapa.json")
+          d=json.loads(p.read_text(encoding="utf8"))
+          assert d.get("sampleOnly") is True
+          assert d.get("sourceRepository")=="https://github.com/SolarisPKN/SolarisPKN-Labs"
+          assert len(d["nodes"])>100
+          assert len(d["edges"])>100
+          for n in d["nodes"]:
+              assert n["id"].startswith(("file:","dir:"))
+              assert n.get("sha256") is None
+              assert not n.get("ai")
+          PY
+      - name: Commit only sanitized scan files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- ejemplos/SolarisPKN-Labs/mapa.json ejemplos/SolarisPKN-Labs/mapa.html ejemplos/SolarisPKN-Labs/diagnostico-relaciones.json ejemplos/SolarisPKN-Labs/README.md
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: publish sanitized public Labs dependency scan"
+            git push origin HEAD:main
+          fi

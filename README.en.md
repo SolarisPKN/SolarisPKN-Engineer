@@ -63,6 +63,12 @@ To disable automatic browser opening:
 
 The server binds to **127.0.0.1 only**. Do not expose it publicly without additional security engineering.
 
+## Reproducible public SolarisPKN-Labs example
+
+The **`labs_public_example.py`** generator and **`.github/workflows/labs-scan.yml`** use a fresh checkout of the [public SolarisPKN-Labs repository](https://github.com/SolarisPKN/SolarisPKN-Labs). Engineer runs a static scan, then publishes exactly four allowlisted files under `ejemplos/SolarisPKN-Labs/`: `mapa.html`, `mapa.json`, `diagnostico-relaciones.json`, and `README.md`. The example includes only Git-tracked public file names, graph links and status labels—never Labs source content, SQLite indexes, secrets, AI comments or local absolute paths. Automatic publication requires GitHub Actions write permission and fails closed on validation errors.
+
+An example scan illustrates the current static analysis coverage; **it cannot prove that any file is safe to remove**.
+
 ## Semantic dependency and directory relationship audit
 
 SolarisPKN-Labs exposed missing links that are now covered by reusable **`project_semantics.py`** rules for future compatible projects:
