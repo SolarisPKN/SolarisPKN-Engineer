@@ -1,0 +1,548 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SolarisPKN-Engineer</title>
+<style>
+:root{color-scheme:dark;--bg:#090e19;--panel:#121e30;--line:#2e415a;--text:#e9eef8;--muted:#9caec6;--teal:#71dbce;--blue:#719ffb}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:13px system-ui,Segoe UI,sans-serif}
+header{height:60px;background:#101b2d;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:12px 18px}
+header strong{font-size:18px}header small{color:var(--muted)}header .push{margin-left:auto}
+.layout{display:grid;grid-template-columns:220px minmax(350px,1fr) 330px;height:calc(100vh - 60px)}
+nav,aside{background:var(--panel);overflow:auto;padding:16px}nav{border-right:1px solid var(--line)}aside{border-left:1px solid var(--line)}
+main{display:flex;flex-direction:column;min-height:0;min-width:0}h2{font-size:17px;margin:0 0 12px}h3{font-size:13px;margin:14px 0 9px}
+input,select,button{border:1px solid var(--line);border-radius:7px;background:#192a40;color:var(--text);font:inherit;padding:9px}
+input,select{width:100%}button{cursor:pointer}button:hover{border-color:var(--teal)}button:disabled{opacity:.45;cursor:not-allowed}
+button.active,button.primary{border-color:#2aaba0;background:#1c5758}button.nav{display:block;width:100%;text-align:left;margin:6px 0}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.grow{flex:1}
+label{display:block;color:var(--muted);font-size:11px;font-weight:600;margin:10px 0 6px}
+small,.muted{color:var(--muted)}.check{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text)}.check input{width:auto}
+hr{border:0;border-top:1px solid var(--line);margin:15px 0}
+.hidden{display:none!important}.tab{padding:17px;overflow:auto;min-height:0;flex:1}.tab.hidden{display:none!important}.card{background:#132237;border:1px solid var(--line);border-radius:10px;padding:13px;margin:10px 0}
+.card h3{margin-top:0}.columns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#tab-projects{display:flex;flex-direction:column;padding:0;overflow:hidden}#project-controls{padding:14px 17px;border-bottom:1px solid var(--line)}
+#map-wrap{flex:1;min-height:200px}#map-wrap iframe{width:100%;height:100%;border:0;background:var(--bg)}
+#log{height:120px;border-top:1px solid var(--line);padding:8px 14px;overflow:auto;flex-shrink:0}pre{font:11px Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+#tree{font:12px Consolas,monospace}.tree-item{display:block;text-align:left;background:transparent;border:0;border-radius:3px;width:100%;padding:6px}
+.tree-item.selected{background:#236058}.tree-item:hover{background:#294159}.subtree{margin-left:14px;border-left:1px solid var(--line);padding-left:7px}
+.tree-item::before,.status-dot{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;background:#91a4ba;margin-right:8px;flex-shrink:0;box-shadow:0 0 0 1px #ffffff16}
+.tree-item.state-done::before,.status-dot.state-done{background:#41d98a}
+.tree-item.state-pending::before,.tree-item.state-running::before,.status-dot.state-pending,.status-dot.state-running{background:#f5c85b}
+.tree-item.state-encrypted::before,.status-dot.state-encrypted{background:#fb6474}
+.tree-item.state-failed::before,.status-dot.state-failed{background:#ac9abf}
+.tree-item.state-external::before,.status-dot.state-external{background:#7ca8ef}
+.state-legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin:10px 0;font-size:11px;color:var(--muted)}.state-legend span{display:inline-flex;align-items:center}.state-legend .status-dot{margin-right:4px}
+#details{overflow-wrap:anywhere;line-height:1.55}#details pre{background:#08101c;padding:9px;max-height:270px;overflow:auto}
+#providers .provider{display:flex;justify-content:space-between;align-items:center;gap:5px;padding:9px;margin:5px 0;border:1px solid var(--line);border-radius:7px}
+#providers .provider.active{border-color:var(--teal);background:#183538}#providers button{white-space:nowrap}
+.tag{font-size:10px;color:#b8e9e0;padding:3px 6px;background:#2b4a55;border-radius:5px}
+.notice{background:#182b42;padding:10px;border-radius:8px;color:#c0d0e4;font-size:12px;line-height:1.6}
+#message{min-height:18px;font-size:12px;color:var(--teal)}#file-search{margin:7px 0}
+#tree-only{display:none;flex:1;padding:14px;overflow:auto}
+@media(max-width:1080px){.layout{grid-template-columns:190px minmax(0,1fr)}aside{grid-column:1/-1;border-top:1px solid var(--line);border-left:0;max-height:450px}.layout{height:auto}main{height:80vh}}
+@media(max-width:670px){.layout{display:block}nav{display:flex;gap:6px;flex-wrap:wrap}nav button.nav{width:auto}main{height:70vh}.columns{grid-template-columns:1fr}}
+
+/* Workspace layout: prioritize the dependency graph over controls. */
+.layout{display:grid;grid-template-columns:180px minmax(0,1fr) 312px;height:calc(100dvh - 60px);min-height:0}
+.layout.nav-hidden{grid-template-columns:minmax(0,1fr) 312px}
+.layout.nav-hidden #primary-nav{display:none}
+.layout.side-hidden{grid-template-columns:180px minmax(0,1fr)}
+.layout.side-hidden #workspace-sidebar{display:none}
+.layout.nav-hidden.side-hidden{grid-template-columns:minmax(0,1fr)}
+.layout.map-fullscreen{position:fixed;inset:0;z-index:100;grid-template-columns:minmax(0,1fr);height:100dvh}
+.layout.map-fullscreen #primary-nav,.layout.map-fullscreen #workspace-sidebar,.layout.map-fullscreen #project-summary,
+.layout.map-fullscreen #scan-options,.layout.map-fullscreen #message{display:none!important}
+.layout.map-fullscreen #project-controls{padding:8px;background:#0b1625}
+.layout.map-fullscreen #worktop{margin:0}
+.layout.map-fullscreen #tab-projects{height:100%;min-height:0}
+header{height:60px;gap:12px}
+.header-icon{padding:7px 11px;white-space:nowrap}
+header strong{white-space:nowrap}
+header .tag{white-space:nowrap}
+#project-controls{padding:10px 15px 6px;flex-shrink:0}
+#project-summary{min-height:30px}
+#project-title{margin:0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:30vw}
+#counts{font-size:11px;max-width:38vw;text-align:right;line-height:1.3}
+#scan-options{display:grid;gap:8px;margin:10px 0}
+#scan-options.collapsed{display:none}
+#scan-options .row{gap:8px}
+#scan-options .check{margin:0}
+#worktop{gap:6px;white-space:nowrap;flex-wrap:wrap;padding:6px 0 3px}
+#worktop button{padding:7px 10px;font-size:12px}
+#worktop .active{background:#1b5c5b}
+#message{padding:0 2px;min-height:0}
+#message:empty{display:none}
+main{height:100%;min-height:0}
+#tab-projects{flex:1;min-height:0;height:100%;padding:0}
+#map-wrap{display:flex;flex:1;min-height:0;min-width:0;position:relative}
+#map{flex:1;display:block;width:100%;height:100%;border:0;min-height:0}
+#tree-only{flex:1;overflow:auto;min-height:0}
+#log{height:auto;max-height:none;padding:12px 8px;background:#0d1a2a}
+#log pre{white-space:pre-wrap;line-height:1.6;font-size:12px}
+nav{padding:13px}
+nav h3{margin:8px 0}
+nav .notice{font-size:11px}
+nav button.nav{padding:9px}
+#workspace-sidebar{min-height:0;min-width:0;overflow:hidden;padding:0;display:flex;flex-direction:column}
+#side-tabs{display:flex;gap:0;border-bottom:1px solid var(--line);padding:7px 6px}
+#side-tabs button{flex:1;padding:9px 3px;background:transparent;border:0;border-bottom:2px solid transparent;border-radius:0;color:var(--muted);font-size:12px}
+#side-tabs button.active{color:var(--teal);border-bottom-color:var(--teal);background:#14253a}
+.side-pane{flex:1;min-height:0;overflow:auto;padding:8px 13px 16px}
+.side-pane h3:first-child{margin-top:9px}
+.side-pane .tree-item{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#selected-key{max-height:90px;overflow:auto;font-size:11px;overflow-wrap:anywhere}
+#details{max-width:100%}
+#details ul{padding-left:20px}
+#details li{overflow-wrap:anywhere}
+#pane-inspect .card{margin:13px 0}
+#pane-scope{overflow-y:auto}
+#pane-tree .state-legend{line-height:1.6}
+@media(max-width:1060px){
+ .layout{grid-template-columns:155px minmax(0,1fr) 280px}
+ .layout.nav-hidden{grid-template-columns:minmax(0,1fr) 280px}
+ .layout.side-hidden{grid-template-columns:155px minmax(0,1fr)}
+ .layout.nav-hidden.side-hidden{grid-template-columns:minmax(0,1fr)}
+ #project-title{max-width:33vw}
+}
+@media(max-width:730px){
+ .layout,.layout.nav-hidden,.layout.side-hidden,.layout.nav-hidden.side-hidden{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);height:calc(100dvh - 60px)}
+ #primary-nav{display:none!important}
+ .layout.nav-open #primary-nav{display:block!important;position:fixed;top:60px;left:0;bottom:0;width:min(87vw,265px);z-index:25;box-shadow:15px 0 40px #0009}
+ #workspace-sidebar{display:none}
+ .layout:not(.side-hidden) #workspace-sidebar{display:flex;position:fixed;right:0;top:60px;bottom:0;width:min(94vw,330px);background:var(--panel);z-index:20;box-shadow:-20px 0 40px #0009}
+ #map-wrap{min-height:0}
+ header small{display:none}
+ #project-title{max-width:50vw}
+ #counts{display:none}
+ #worktop{white-space:normal}
+}
+</style></head><body>
+<header><button id="toggle-nav" class="header-icon" title="Mostrar/ocultar menú principal" aria-label="Menú principal">☰</button><strong>✦ SolarisPKN-Engineer</strong><small>Analizador de arquitectura</small><span class="push tag" id="job-label">Local</span><button id="toggle-sidebar" class="header-icon" title="Mostrar/ocultar panel lateral">◧ Panel</button></header>
+<div class="layout" id="work-layout"><nav id="primary-nav"><h3>Navegación</h3><button class="nav active" data-tab="projects">▣ Explorador</button><button class="nav" data-tab="logs">≡ Registro de actividad</button><button class="nav" data-tab="integrations">◇ Integraciones</button><button class="nav" data-tab="hardware">⚙ Hardware y rendimiento</button><hr><h3>Proyectos</h3><div id="project-list"></div><p class="notice">Datos persistentes en <b>Engineer/proyectos/</b>. Los originales permanecen intactos.</p></nav>
+<main>
+<section id="tab-projects" class="tab">
+<div id="project-controls">
+<div class="row" id="project-summary"><h2 id="project-title">Elegí un proyecto</h2><span class="grow"></span><span id="counts" class="muted"></span><button id="toggle-options" title="Mostrar controles de análisis">⚙ Configurar análisis</button></div>
+<div id="scan-options" class="collapsed">
+<div class="row"><input id="target" class="grow" placeholder="Seleccioná una carpeta, .exe o .iso"><button id="register" class="primary">Agregar proyecto</button></div>
+<div class="row"><button id="annotate">✦ Describir con IA</button><button id="export">↻ Exportar mapa</button><label class="check"><input type="checkbox" id="all">Todo el directorio</label><label class="check"><input type="checkbox" id="refresh">Reanalizar</label></div>
+<div class="row"><label class="check"><input type="checkbox" id="ai">IA en el análisis</label><select id="selected-provider" style="max-width:220px"></select><label class="check"><input type="checkbox" id="allow-ai-remote">Autorizar IA remota</label></div>
+</div>
+<div id="worktop" class="row"><button id="scan" class="primary">▶ Analizar</button><span class="muted">Vista:</span><button data-view="both" class="active">Mapa + árbol</button><button data-view="map">Solo mapa</button><button data-view="tree">Solo árbol</button><button id="focus-map" title="Ampliar el mapa usando toda la pantalla">⛶ Pantalla amplia</button><span class="grow"></span><button id="reload-map">Actualizar mapa</button></div>
+<div id="message" role="status" aria-live="polite"></div>
+</div>
+<div id="map-wrap"><iframe id="map" sandbox="allow-scripts" title="Grafo de dependencias"></iframe></div>
+<div id="tree-only"></div>
+</section><section id="tab-logs" class="tab hidden"><h2>Registro de actividad</h2><p class="muted">Historial del análisis en curso, errores y tareas realizadas. Se actualiza junto con el panel.</p><div id="log"><pre id="log-text">Sin análisis todavía.</pre></div>
+</section>
+<section id="tab-integrations" class="tab hidden">
+<h2>Integraciones</h2><p class="muted">Las conexiones de IA se configuran aquí y se eligen después en Proyectos. Las claves se consultan desde variables de entorno, nunca se guardan en JSON.</p>
+<div class="card"><h3>Motores de inteligencia artificial</h3><div id="providers"></div></div>
+<div class="card"><h3 id="provider-heading">Configuración</h3>
+<label>Modelo</label><input id="provider-model"><label>API endpoint</label><input id="provider-url"><label>Variable de entorno para API key</label><input id="provider-env"><label>Clave API (se guardará cifrada en Windows DPAPI)</label><input type="password" id="provider-secret" autocomplete="off" spellcheck="false" placeholder="Nueva clave; se borra del campo tras guardarla"><div class="row" style="margin-top:10px"><button id="provider-save-secret">Guardar clave cifrada</button><button id="provider-delete-secret">Eliminar clave guardada</button><span id="provider-vault-state" class="muted"></span></div>
+<div class="row" style="margin-top:12px"><button id="save-provider" class="primary">Guardar proveedor</button><button id="check-provider">Verificar</button><label class="check"><input type="checkbox" id="allow-test">Autorizar verificación remota</label></div><p class="muted" id="provider-info"></p></div>
+<div class="card"><h3>Formatos y lenguajes reconocidos</h3><p class="muted">La identificación de un lenguaje no equivale a interpretar sus dependencias. Engineer separa análisis especializado, heurísticas e inventario.</p><div id="formats-status" class="muted">Consultando catálogo…</div><div class="row" style="margin-top:10px"><button id="formats-refresh">Actualizar catálogo GitHub Linguist</button></div><p id="formats-info" class="muted">La actualización descarga exclusivamente datos YAML desde el proyecto oficial, sin ejecutar código.</p></div>
+<div class="card"><h3>Integraciones de descifrado</h3><p class="muted">Método disponible: ZIP protegido con contraseña tradicional (ZipCrypto). Alternativa universal: registrar una copia ya descifrada con la herramienta autorizada del propietario. Ambos se seleccionan desde el inspector de un nodo rojo. Podés recordar las claves cifradas con Windows DPAPI si lo elegís; Engineer no intenta adivinarlas.</p><p class="muted">Adaptadores futuros: age, GPG/OpenPGP, WinZip AES y formatos personalizados mediante lectores adicionales. No están habilitados todavía.</p></div>
+<div class="card"><h3>GitHub</h3><p class="muted">Usá un token con los permisos mínimos. También podés mantenerlo en GITHUB_TOKEN. Las claves guardadas en la bóveda quedan cifradas para tu usuario Windows.</p><label>Nuevo token GitHub</label><input type="password" id="github-secret" autocomplete="off" spellcheck="false" placeholder="Token para guardar cifrado"><div class="row" style="margin-top:10px"><button id="github-save-secret">Guardar token cifrado</button><button id="github-delete-secret">Eliminar token guardado</button><span id="github-vault-state" class="muted"></span></div><hr><button id="github-check">Comprobar GitHub</button><button id="github-repos">Listar repositorios</button><pre id="github-info">Sin comprobar.</pre></div>
+</section>
+<section id="tab-hardware" class="tab hidden"><h2>Hardware y rendimiento</h2><div class="card"><h3>Detección de recursos</h3><div id="hardware">Pendiente</div></div>
+<div class="card"><h3>Control de uso del equipo</h3><label>Perfil</label><select id="profile"><option value="eco">Eco — prioridad baja y pausas</option><option value="balanced" selected>Equilibrado — uso moderado</option><option value="full">Full — máxima actividad</option></select><label>Trabajadores (0 = automático)</label><input id="workers" type="number" min="0" max="32" value="0"><label>Modo CPU</label><select id="worker-mode"><option value="thread">Hilos</option><option value="process">Procesos (multinúcleo)</option></select>
+<label>Límite de archivo MiB (0 = sin límite artificial)</label><input id="max-mb" type="number" min="0" max="2048" value="0">
+<div class="notice">El modo Eco reduce prioridad y añade pausas, pero no garantiza un porcentaje rígido de CPU/RAM. El análisis de grandes fuentes usa fragmentos y el de ejecutables usa mapeo de memoria.</div></div></section>
+</main>
+<aside id="workspace-sidebar">
+<div id="side-tabs" role="tablist" aria-label="Panel de navegación"><button class="active" data-pane="tree" role="tab">Archivos</button><button data-pane="inspect" role="tab">Inspector</button><button data-pane="scope" role="tab">Sector</button></div>
+<div id="pane-tree" class="side-pane"><h3>Árbol de archivos</h3><div class="state-legend"><span><i class="status-dot state-done"></i>Analizado</span><span><i class="status-dot state-pending"></i>Pendiente</span><span><i class="status-dot state-encrypted"></i>Cifrado</span><span><i class="status-dot state-failed"></i>Error</span><span><i class="status-dot state-external"></i>Externo</span></div><input id="file-search" placeholder="Buscar archivo"><div id="tree"></div></div>
+<div id="pane-inspect" class="side-pane hidden"><h3>Inspector de archivo</h3><div id="selected-key" class="muted">Sin selección</div><div id="details"></div>
+<div id="unlock-box" class="card hidden">
+<h3>🔐 Desbloqueo autorizado</h3>
+<p class="muted">Solo para archivos propios o con permiso. Engineer guarda contraseñas únicamente si activás la bóveda cifrada DPAPI.</p>
+<label>Método proporcionado por el propietario</label>
+<select id="unlock-method"><option value="zip-password">Contraseña ZIP (ZipCrypto)</option><option value="owner-copy">Copia ya descifrada por su propietario</option></select>
+<div id="unlock-pass-row"><label>Contraseña de este archivo</label><input id="unlock-password" type="password" autocomplete="off" spellcheck="false" placeholder="Contraseña de ZIP"><label class="check"><input id="unlock-remember" type="checkbox"> Recordar cifrada para mi usuario de Windows</label><label class="check"><input id="unlock-use-saved" type="checkbox"> Usar contraseña guardada</label><button id="unlock-forget" type="button">Eliminar contraseña guardada</button><p id="unlock-vault-status" class="muted"></p></div>
+<div id="unlock-copy-row" class="hidden"><label>Ruta de archivo o carpeta descifrada</label><input id="unlock-plain-path" placeholder="C:\MiCodigoDescifrado\"></div>
+<label class="check"><input id="unlock-authorized" type="checkbox"> Confirmo que soy propietario o tengo autorización</label>
+<button id="unlock-start" class="primary" style="margin-top:9px;width:100%">Analizar contenido desbloqueado</button>
+<p class="muted" id="unlock-result"></p>
+</div>
+</div>
+<div id="pane-scope" class="side-pane hidden"><h3>Sector de trabajo</h3>
+<label>Archivo o directorio relativo</label><input id="scope" placeholder="src/motor/ o file:main.py">
+<label>Dirección</label><select id="direction"><option value="both">Dependencias y dependientes</option><option value="dependencies">Dependencias</option><option value="dependents">Dependientes / impacto</option></select>
+<div class="row" style="margin-top:10px"><button id="filter">Analizar sector</button><button id="unfilter">Mapa completo</button></div><p id="scope-info" class="muted"></p>
+</div>
+</aside></div>
+<script>
+"use strict";
+const TOKEN=/*ENGINEER_TOKEN*/null;
+const $=id=>document.getElementById(id);
+let projects=[],active=null,providers=[],provider="ollama",selected=null,scopeSet=null,view="both",lastJob="",searchTimer=null,mapVisibleCount=0,lastMapReload=0,lastTreeRefresh=0;
+const escape=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const qp=o=>new URLSearchParams(o).toString();
+async function api(path,data){
+ const opt=data===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json","X-Engineer-Token":TOKEN},body:JSON.stringify(data)};
+ const r=await fetch(path,opt);const j=await r.json();
+ if(!r.ok)throw Error(j.error||"HTTP "+r.status);return j;
+}
+function info(x){$("message").textContent=x;}
+
+function choosePane(pane){
+ for(const n of ["tree","inspect","scope"]){
+  $("pane-"+n).classList.toggle("hidden",n!==pane);
+ }
+ for(const b of document.querySelectorAll("[data-pane]")){
+  const yes=b.dataset.pane===pane;
+  b.classList.toggle("active",yes);
+  b.setAttribute("aria-selected",String(yes));
+ }
+}
+document.querySelectorAll("[data-pane]").forEach(b=>b.onclick=()=>choosePane(b.dataset.pane));
+$("toggle-options").onclick=()=>{
+ const expanded=$("scan-options").classList.toggle("collapsed")===false;
+ $("toggle-options").textContent=expanded?"⚙ Ocultar configuración":"⚙ Configurar análisis";
+ $("toggle-options").setAttribute("aria-expanded",String(expanded));
+};
+$("toggle-nav").onclick=()=>{
+ const layout=$("work-layout");
+ if(window.matchMedia("(max-width:730px)").matches)layout.classList.toggle("nav-open");
+ else layout.classList.toggle("nav-hidden");
+};
+$("toggle-sidebar").onclick=()=>{
+ const hidden=$("work-layout").classList.toggle("side-hidden");
+ $("toggle-sidebar").setAttribute("aria-pressed",String(!hidden));
+ if(!hidden&&view==="map")view="both";
+ for(const b of document.querySelectorAll("[data-view]"))b.classList.toggle("active",b.dataset.view===view);
+};
+$("focus-map").onclick=()=>{
+ const on=$("work-layout").classList.toggle("map-fullscreen");
+ $("focus-map").textContent=on?"✕ Salir de pantalla amplia":"⛶ Pantalla amplia";
+ $("focus-map").setAttribute("aria-pressed",String(on));
+ setTimeout(()=>window.dispatchEvent(new Event("resize")),20);
+};
+document.addEventListener("keydown",e=>{
+ if(e.key==="Escape"&&$("work-layout").classList.contains("map-fullscreen")){
+  $("work-layout").classList.remove("map-fullscreen");
+  $("focus-map").textContent="⛶ Pantalla amplia";
+  window.dispatchEvent(new Event("resize"));
+ }
+});
+
+function chooseTab(tab){for(const t of ["projects","logs","integrations","hardware"])$("tab-"+t).classList.toggle("hidden",tab!==t);
+ for(const b of document.querySelectorAll("[data-tab]"))b.classList.toggle("active",b.dataset.tab===tab);
+ if(tab==="integrations")loadIntegrations();if(tab==="hardware")loadHardware();}
+document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>chooseTab(b.dataset.tab));
+function chooseView(next){view=next;for(const b of document.querySelectorAll("[data-view]"))b.classList.toggle("active",b.dataset.view===view);
+ $("map-wrap").style.display=view==="tree"?"none":"block";$("tree-only").style.display=view==="tree"?"block":"none";
+ if(view==="tree"){$("tree-only").replaceChildren();loadTree("",$("tree-only"),true);}
+ if(view!=="tree")reloadMap();
+ if(view==="map"||view==="tree")$("work-layout").classList.add("side-hidden");
+ else if(view==="both")$("work-layout").classList.remove("side-hidden");}
+document.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>chooseView(b.dataset.view));
+async function loadProjects(){const j=await api("/api/projects");projects=j.projects;
+ $("project-list").innerHTML=projects.map(p=>'<button class="nav '+(p.id===active?"active":"")+'" data-proj="'+escape(p.id)+'">'+escape(p.name)+'</button>').join("");
+ $("project-list").querySelectorAll("button").forEach(b=>b.onclick=()=>chooseProject(b.dataset.proj));
+ if(!active&&projects.length)chooseProject(projects[0].id);
+}
+async function chooseProject(id){active=id;selected=null;scopeSet=null;lastJob="";
+ $("project-title").textContent=projects.find(p=>p.id===id)?.name||id;
+ await loadProjects();reloadMap();loadTree("",$("tree"),true);status();}
+function reloadMap(){if(active){lastMapReload=Date.now();$("map").src="/mapa?"+qp({project:active,t:lastMapReload});}}
+function focusMap(key){$("map").contentWindow?.postMessage({type:"engineer-focus",key},"*");}
+function postScope(){const keys=scopeSet?Array.from(scopeSet):null;$("map").contentWindow?.postMessage({type:"engineer-scope",keys},"*");}
+$("map").onload=()=>{if(selected)focusMap(selected);postScope();};
+window.addEventListener("message",e=>{
+ if(e.source!==$("map").contentWindow||!e.data)return;
+ if(e.data.type==="engineer-map-ready"){
+  mapVisibleCount=Number(e.data.count)||0;
+  if(selected)focusMap(selected);
+  postScope();
+ } else if(e.data.type==="engineer-select")selectNode(e.data.key,false);
+});
+async function status(){if(!active)return;try{let d=await api("/api/status?"+qp({project:active}));
+ $("counts").textContent=Object.values(d.nodes).reduce((a,b)=>a+b,0)+" nodos · "+(d.nodes.done||0)+" verdes · "+((d.nodes.pending||0)+(d.nodes.running||0))+" amarillos · "+(d.nodes.encrypted||0)+" rojos · "+d.edges+" enlaces";
+ $("job-label").textContent=d.job.state||"En espera";$("log-text").textContent=d.log||"Aún no hay registros";
+ let finished=d.job.state==="done"?d.job.operation+"-"+d.log.length:"";
+ if(finished&&lastJob!==finished){lastJob=finished;reloadMap();loadTree("",$("tree"),true);}
+ if(d.job.state==="running"){
+  const latest=await api("/api/graph/statuses?"+qp({project:active}));
+  $("map").contentWindow?.postMessage({type:"engineer-statuses",statuses:latest.statuses},"*");
+  for(const b of $("tree").querySelectorAll(".tree-item[data-key]")){
+   const current=latest.statuses[b.dataset.key];
+   if(current){for(const css of [...b.classList])if(css.startsWith("state-"))b.classList.remove(css);
+    b.classList.add("state-"+current);b.title=current;}
+  }
+  if(Date.now()-lastTreeRefresh>14000&&!$("tree").querySelector(".subtree")){
+   lastTreeRefresh=Date.now();loadTree("",$("tree"),true);
+  }
+  if(latest.count>mapVisibleCount+20&&Date.now()-lastMapReload>15000)reloadMap();
+ }
+ }catch(e){info(e.message);}}
+async function loadTree(prefix="",mount=$("tree"),clear=false){
+ if(!active)return;
+ try{
+  const d=await api("/api/tree?"+qp({project:active,prefix}));
+  if(clear)mount.replaceChildren();
+  for(const item of d.children){
+   const b=document.createElement("button");b.className="tree-item";
+   b.textContent=(item.directory?"▸ ":"• ")+item.name;
+   b.dataset.name=item.name;
+   b.classList.add("state-"+(item.status||"pending"));
+   const statusCounts=item.statuses||{};
+   b.title=Object.entries(statusCounts).map(([status,count])=>status+": "+count).join(" · ")||item.status||"pendiente";
+   if(item.directory){
+    if(item.key)b.dataset.key=item.key;
+    b.dataset.prefix=item.prefix;
+    b._expandTree=async()=>{
+     const next=b.nextElementSibling;
+     if(next&&next.classList.contains("subtree")){
+      next.remove();b.textContent="▸ "+item.name;return;
+     }
+     const child=document.createElement("div");child.className="subtree";
+     b.after(child);
+     await loadTree(item.prefix,child,false);
+     b.textContent="▾ "+item.name;
+    };
+    b.onclick=async()=>{
+      if(item.key)await selectNode(item.key,true);
+      await b._expandTree();
+    };
+   }else if(item.key){
+    b.dataset.key=item.key;
+    b.onclick=()=>selectNode(item.key,true);
+   }
+   mount.append(b);
+  }
+  if(d.truncated){
+   const tip=document.createElement("p");tip.className="muted";
+   tip.textContent="Directorio grande: muestra inicial limitada.";mount.append(tip);
+  }
+ }catch(e){info(e.message);}
+}
+function wireTree(root){root.querySelectorAll(".tree-item[data-key]").forEach(b=>b.onclick=()=>selectNode(b.dataset.key,true));}
+async function expandTreeFor(key){
+ if(!key.startsWith("file:")&&!key.startsWith("iso:")&&!key.startsWith("zip:"))return;
+ const parts=key.startsWith("file:")?key.slice(5).split("/"):
+  (()=>{const inner=key.slice(4).split("!/");return [inner[0],...(inner[1]||"").split("/")];})();
+ let mount=$("tree");
+ for(let i=0;i<parts.length-1;i++){
+  const b=Array.from(mount.children).find(el=>el.dataset?.name===parts[i]&&el.dataset.prefix);
+  if(!b)return;
+  let child=b.nextElementSibling;
+  if(!child||!child.classList.contains("subtree")){await (b._expandTree?b._expandTree():b.onclick());child=b.nextElementSibling;}
+  if(!child)return;
+  mount=child;
+ }
+ for(const b of $("tree").querySelectorAll("[data-key]"))b.classList.toggle("selected",b.dataset.key===key);
+}
+async function selectNode(key,send=true){if(!active)return;selected=key;$("selected-key").textContent=key;
+ for(const b of $("tree").querySelectorAll("[data-key]"))b.classList.toggle("selected",b.dataset.key===key);
+ choosePane("inspect");
+ if(send)focusMap(key);
+ try{const d=await api("/api/node?"+qp({project:active,key}));
+  const links=(arr,k)=>"<h3>"+k+" ("+arr.length+")</h3>"+(arr.length?"<ul>"+arr.map(x=>"<li><button type=\"button\" class=\"dep-link\" data-dep-target=\""+escape(x.target||x.source)+"\">"+escape(x.target||x.source)+"</button> <span class=muted>["+escape(x.relation)+", "+escape(x.evidence||"no especificada")+"]</span></li>").join("")+"</ul>":"<p class=muted>Sin referencias detectadas (no demuestra que no se utilice)</p>");
+  const ai=d.ai?.commentary;
+  const locked=d.key.startsWith("file:")&&(d.status==="encrypted"||/\.(zip|jar|whl)$/i.test(d.key));
+  $("unlock-box").classList.toggle("hidden",!locked);
+  $("unlock-password").value="";
+  $("unlock-remember").checked=false;
+  $("unlock-use-saved").checked=false;
+  $("unlock-authorized").checked=false;
+  $("unlock-result").textContent=locked?(d.error||"Podés gestionar el desbloqueo autorizado de este archivo."):"";
+  $("unlock-vault-status").textContent="";
+  if(locked&&/\.(zip|jar|whl)$/i.test(d.key)){
+   const chosenProject=active;
+   api("/api/vault/status?"+qp({kind:"archive",name:d.key,project:chosenProject})).then(v=>{
+    if(active!==chosenProject||selected!==d.key)return;
+    $("unlock-use-saved").disabled=!v.available;
+    $("unlock-vault-status").textContent=v.available?"Contraseña guardada con DPAPI para tu usuario Windows.":"No hay contraseña guardada para este archivo.";
+   }).catch(e=>{$("unlock-use-saved").disabled=true;$("unlock-vault-status").textContent=e.message;});
+  }
+  const canZip=/\.(zip|jar|whl)$/i.test(d.key);
+  $("unlock-method").value=canZip?"zip-password":"owner-copy";
+  $("unlock-pass-row").classList.toggle("hidden",!canZip);
+  $("unlock-copy-row").classList.toggle("hidden",canZip);
+  $("details").innerHTML="<p><span class=tag>"+escape(d.status)+"</span> Profundidad "+d.depth+"</p>"+
+  (d.file_type?"<p><b>Formato:</b> "+escape(d.file_type.language)+" · <b>Motor:</b> "+escape(d.file_type.analyzer)+" · <b>Detección:</b> "+escape(d.file_type.evidence)+"</p>"+(d.file_type.analyzer==="inventory"?"<p class=muted>Inventariado sin lector de dependencias específico.</p>":""):"")+
+  (ai?"<h3>Comentario IA</h3><p>"+escape(ai.summary)+"</p><ul>"+(ai.responsibilities||[]).map(x=>"<li>"+escape(x)+"</li>").join("")+"</ul><p class=muted>Interpretación no verificada</p>":"<p class=muted>Sin explicación IA</p>")+
+  "<section id=\"usage-analysis\"><h3>Uso e impacto</h3><p class=muted>Comprobando referencias inversas…</p></section>"+
+  links(d.outgoing.filter(x=>x.relation!=="contains"&&x.relation!=="generates"),"Depende de")+links(d.incoming.filter(x=>x.relation!=="contains"&&x.relation!=="generates"),"Utilizado por")+links(d.incoming.filter(x=>x.relation==="generates"),"Generado por")+links(d.outgoing.filter(x=>x.relation==="generates"),"Archivos que genera")+
+  (d.preview?"<h3>Código (vista previa)</h3><pre>"+escape(d.preview)+"</pre>":"")+
+  (d.error?"<p>"+escape(d.error)+"</p>":"");
+  $("details").querySelectorAll("[data-dep-target]").forEach(button=>{
+    button.onclick=()=>selectNode(button.dataset.depTarget,true);
+  });
+  const impactTarget=$("usage-analysis");
+  if(impactTarget){
+   try{
+    const impact=await api("/api/impact?"+qp({project:active,key}));
+    if(selected!==key)return;
+    const usage={
+      referenced:"Referenciado",
+      "possibly-referenced":"Uso posible",
+      entrypoint:"Punto de entrada/configuración",
+      unresolved:"Uso no determinado"
+    }[impact.usage_status]||"Uso no determinado";
+    const chains=(impact.entrypoint_chains||[]).slice(0,12).map(entry=>
+      "<li>"+entry.chain.map((node,i)=>i? " ← <button type=\"button\" class=\"dep-link\" data-dep-target=\""+
+        escape(node)+"\">"+escape(node)+"</button>":"<button type=\"button\" class=\"dep-link\" data-dep-target=\""+
+        escape(node)+"\">"+escape(node)+"</button>").join("")+"</li>").join("");
+    impactTarget.innerHTML="<p><b>"+escape(usage)+"</b> · "+impact.direct_consumer_count+
+      " referencias directas · "+impact.transitive_consumer_count+" afectados potenciales</p>"+
+      "<p>"+escape(impact.explanation)+"</p>"+
+      (chains?"<details open><summary>Rutas hasta puntos de entrada ("+impact.entrypoint_chains.length+")</summary><ol>"+chains+"</ol></details>":"")+
+      (impact.limits?.truncated?"<p class=muted>Resultado parcial: recorrido limitado; puede haber más dependencias.</p>":"")+
+      "<p class=muted>Eliminar: sin verificar. No se autoriza limpieza automática basándose solo en ausencia de referencias.</p>";
+    impactTarget.querySelectorAll("[data-dep-target]").forEach(button=>{
+      button.onclick=()=>selectNode(button.dataset.depTarget,true);
+    });
+   }catch(err){impactTarget.textContent="Impacto no disponible: "+err.message;}
+  }
+  if(!send)expandTreeFor(key);
+ }catch(e){info(e.message);}}
+async function loadFormats(){
+ try{
+  const d=await api("/api/formats");
+  $("formats-status").textContent=d.language_labels+" nombres de lenguajes · "+
+   d.extensions+" extensiones reconocidas · "+
+   (d.upstream_loaded?"Catálogo externo actualizado "+d.upstream_updated:"Catálogo incorporado sin conexión");
+  $("formats-info").textContent="Lectores reales/heurísticos: "+
+   d.implemented_analyzers.join(", ")+". Los formatos sin lector se inventarían, no se interpretan.";
+ }catch(e){$("formats-status").textContent=e.message;}
+}
+$("formats-refresh").onclick=async()=>{
+ if(!window.confirm("¿Descargar el catálogo público de extensiones de GitHub Linguist? No se envían datos privados de tus proyectos."))return;
+ $("formats-info").textContent="Conectando con catálogo oficial…";
+ try{await api("/api/formats/update",{consent:true});
+   await loadFormats();
+ }catch(e){$("formats-info").textContent=e.message;}
+};
+async function loadIntegrations(){loadFormats();try{const d=await api("/api/integrations");providers=d.providers;
+ $("providers").innerHTML=providers.map(p=>'<div class="provider '+(p.id===provider?"active":"")+'"><span>'+escape(p.label)+'<br><small>'+escape(p.protocol)+(p.credential_configured?" · clave detectada":"")+'</small></span><button data-id="'+escape(p.id)+'">Configurar</button></div>').join("");
+ $("providers").querySelectorAll("button").forEach(b=>b.onclick=()=>chooseProvider(b.dataset.id));
+ $("selected-provider").innerHTML=providers.map(p=>'<option value="'+escape(p.id)+'">'+escape(p.label)+'</option>').join("");
+ $("selected-provider").value=provider;chooseProvider(provider,false);
+ updateGithubVault();
+}catch(e){$("provider-info").textContent=e.message;}}
+function chooseProvider(id,repaint=true){provider=id;const p=providers.find(x=>x.id===id);if(!p)return;
+ $("provider-heading").textContent=p.label;$("provider-model").value=p.model;$("provider-url").value=p.endpoint;
+ $("provider-env").value=p.key_env;$("provider-info").textContent=p.caveat||"Las credenciales van en variables de entorno.";
+ $("provider-secret").value="";
+ updateProviderVault();
+ if(repaint)loadIntegrations();}
+$("save-provider").onclick=async()=>{try{
+ await api("/api/integrations/update",{id:provider,settings:{model:$("provider-model").value,endpoint:$("provider-url").value,key_env:$("provider-env").value}});
+ await loadIntegrations();$("provider-info").textContent="Configuración guardada sin credenciales.";}catch(e){$("provider-info").textContent=e.message;}};
+$("check-provider").onclick=async()=>{try{const d=await api("/api/integrations/check",{id:provider,allow_remote:$("allow-test").checked});
+ $("provider-info").textContent=JSON.stringify(d);}catch(e){$("provider-info").textContent=e.message;}};
+async function vaultStatus(kind,name,location){
+ try{
+  const q={kind,name};if(location)q.project=location;
+  const d=await api("/api/vault/status?"+qp(q));
+  return d.available?"Guardada cifrada (DPAPI)":"No guardada";
+ }catch(error){return error.message;}
+}
+async function updateProviderVault(){
+ const current=provider;
+ const status=await vaultStatus("ai-provider",current);
+ if(provider===current)$("provider-vault-state").textContent=status;
+}
+async function updateGithubVault(){
+ $("github-vault-state").textContent=await vaultStatus("github","default");
+}
+$("provider-save-secret").onclick=async()=>{
+ const secret=$("provider-secret").value;
+ $("provider-secret").value="";
+ if(!secret){$("provider-vault-state").textContent="Escribí una nueva clave.";return;}
+ try{
+  await api("/api/vault/save",{kind:"ai-provider",name:provider,secret,authorized:true});
+  $("provider-vault-state").textContent="Clave cifrada guardada.";
+ }catch(error){$("provider-vault-state").textContent=error.message;}
+};
+$("provider-delete-secret").onclick=async()=>{
+ if(!window.confirm("¿Eliminar la clave cifrada de este proveedor?"))return;
+ try{const d=await api("/api/vault/delete",{kind:"ai-provider",name:provider});
+ $("provider-vault-state").textContent=d.deleted?"Clave eliminada.":"No había clave guardada.";}
+ catch(error){$("provider-vault-state").textContent=error.message;}
+};
+$("github-save-secret").onclick=async()=>{
+ const secret=$("github-secret").value;
+ $("github-secret").value="";
+ if(!secret){$("github-vault-state").textContent="Escribí el token.";return;}
+ try{
+  await api("/api/vault/save",{kind:"github",name:"default",secret,authorized:true});
+  $("github-vault-state").textContent="Token cifrado guardado.";
+ }catch(error){$("github-vault-state").textContent=error.message;}
+};
+$("github-delete-secret").onclick=async()=>{
+ if(!window.confirm("¿Eliminar el token de GitHub guardado?"))return;
+ try{const d=await api("/api/vault/delete",{kind:"github",name:"default"});
+ $("github-vault-state").textContent=d.deleted?"Token eliminado.":"No había token guardado.";}
+ catch(error){$("github-vault-state").textContent=error.message;}
+};
+$("github-check").onclick=async()=>{try{$("github-info").textContent=JSON.stringify(await api("/api/github/status"),null,2);}catch(e){$("github-info").textContent=e.message;}};
+$("github-repos").onclick=async()=>{try{$("github-info").textContent=JSON.stringify(await api("/api/github/repositories"),null,2);}catch(e){$("github-info").textContent=e.message;}};
+async function loadHardware(){try{const d=await api("/api/hardware");$("hardware").textContent=JSON.stringify(d,null,2);}catch(e){$("hardware").textContent=e.message;}}
+function scanSettings(){return {project:active,all:$("all").checked,refresh:$("refresh").checked,ai:$("ai").checked,
+  provider_id:$("selected-provider").value,language:"es",allow_remote:$("allow-ai-remote").checked,
+  profile:$("profile").value,worker_mode:$("worker-mode").value,workers: Number($("workers").value)||1,
+  max_mb:Number($("max-mb").value)||0};}
+async function start(kind){if(!active)return info("Seleccioná un proyecto");
+ try{let s=scanSettings();if(!Number($("workers").value))s.workers=$("profile").value==="eco"?1:$("profile").value==="full"?8:4;
+ await api("/api/"+kind,s);info("Trabajo "+kind+" iniciado");status();
+ }catch(e){info(e.message);}}
+$("scan").onclick=()=>start("scan");$("annotate").onclick=()=>start("annotate");$("export").onclick=()=>start("export");
+$("register").onclick=async()=>{try{const d=await api("/api/project",{path:$("target").value.trim()});await loadProjects();await chooseProject(d.project.id);}catch(e){info(e.message);}};
+$("reload-map").onclick=reloadMap;
+$("filter").onclick=async()=>{if(!active)return;try{
+ const d=await api("/api/scope?"+qp({project:active,reference:$("scope").value.trim(),direction:$("direction").value}));
+ scopeSet=new Set(d.nodes);postScope();$("scope-info").textContent=d.total+" nodos relacionados indexados"+(d.total>d.nodes.length?" (vista parcial)":"");
+ }catch(e){$("scope-info").textContent=e.message;}};
+$("unfilter").onclick=()=>{scopeSet=null;postScope();$("scope-info").textContent="Mapa completo";};
+$("file-search").oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(async()=>{if(!$("file-search").value.trim())return loadTree("",$("tree"),true);
+ try{const d=await api("/api/nodes?"+qp({project:active,search:$("file-search").value,page:0}));
+ $("tree").innerHTML=d.nodes.map(n=>'<button class="tree-item state-'+escape(n.status)+'" data-key="'+escape(n.key)+'" title="'+escape(n.status)+'">'+escape(n.key)+'</button>').join("");
+ wireTree($("tree"));}catch(e){info(e.message);}},280);};
+$("selected-provider").onchange=()=>{provider=$("selected-provider").value;};
+$("unlock-method").onchange=()=>{
+ const isZip=$("unlock-method").value==="zip-password";
+ $("unlock-pass-row").classList.toggle("hidden",!isZip);
+ $("unlock-copy-row").classList.toggle("hidden",isZip);
+ $("unlock-password").value="";
+};
+$("unlock-use-saved").onchange=()=>{
+ const use=$("unlock-use-saved").checked;
+ $("unlock-password").disabled=use;
+ $("unlock-remember").disabled=use;
+ if(use){$("unlock-password").value="";$("unlock-remember").checked=false;}
+};
+$("unlock-forget").onclick=async()=>{
+ if(!active||!selected||!window.confirm("¿Eliminar la contraseña cifrada de este archivo?"))return;
+ try{
+  const result=await api("/api/vault/delete",{kind:"archive",name:selected,project:active});
+  $("unlock-use-saved").checked=false;
+  $("unlock-use-saved").disabled=true;
+  $("unlock-password").disabled=false;
+  $("unlock-remember").disabled=false;
+  $("unlock-vault-status").textContent=result.deleted?"Contraseña guardada eliminada.":"No había contraseña guardada.";
+ }catch(error){$("unlock-vault-status").textContent=error.message;}
+};
+$("unlock-start").onclick=async()=>{
+ const status=$("unlock-result");
+ if(!active||!selected){status.textContent="Seleccioná un archivo compatible.";return;}
+ if(!$("unlock-authorized").checked){status.textContent="Confirmá que tenés autorización para analizarlo.";return;}
+ try{
+  if($("unlock-method").value==="zip-password"){
+   const saved=$("unlock-use-saved").checked;
+   const body={project:active,key:selected,authorized:true,
+    remember:!saved&&$("unlock-remember").checked,use_saved:saved};
+   if(!saved)body.password=$("unlock-password").value;
+   $("unlock-password").value="";
+   try{
+    const result=await api("/api/unlock",body);
+    status.textContent=result.accepted?"Análisis iniciado. Si marcaste recordar, se guardará cifrada solo tras validar la contraseña.":"No se inició.";
+   }finally{delete body.password;}
+  }else{
+   const result=await api("/api/unlock-reference",{project:active,key:selected,path:$("unlock-plain-path").value.trim(),authorized:true});
+   status.textContent="Copia descifrada asociada al proyecto: "+result.project.name;
+   await loadProjects();
+  }
+ }catch(error){$("unlock-password").value="";status.textContent=error.message;}
+};
+loadIntegrations();loadHardware();loadProjects();setInterval(status,3000);
+</script></body></html>
