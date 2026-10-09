@@ -27,7 +27,7 @@ PUBLIC_FILES = (
     "encrypted_formats.py", "engineer.py", "export_graph.py",
     "generated_files.py", "graph_diagnostics.py", "graph_structure.py",
     "impact_analysis.py", "integrations.py", "iso_reader.py",
-    "language_catalog.py", "live_view.py", "macho_reader.py",
+    "language_catalog.py", "labs_public_example.py", "live_view.py", "macho_reader.py",
     "pe_reader.py", "project_semantics.py", "resource_controls.py",
     "scope.py", "server.py", "static_imports.py", "tray_launcher.py",
     "visualizer.html", "web_dependencies.py", "workspace.py",
@@ -52,11 +52,15 @@ def eligible(rel: Path) -> bool:
         return False
     if rel.parts[0] == "tests":
         return len(parts) == 2 and rel.suffix == ".py" and rel.name.startswith("test_")
+    if rel.as_posix() in (".github/workflows/tests.yml", ".github/workflows/labs-scan.yml"):
+        return True
     return len(parts) == 1 and rel.as_posix() in PUBLIC_FILES
 
 
 def safe_sources() -> list[Path]:
     names = [Path(n) for n in PUBLIC_FILES]
+    names.extend([Path(".github/workflows/tests.yml"),
+                  Path(".github/workflows/labs-scan.yml")])
     names.extend(
         Path("tests") / p.name
         for p in (ROOT / "tests").glob("test_*.py")

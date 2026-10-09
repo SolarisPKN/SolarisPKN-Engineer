@@ -63,6 +63,12 @@ Desactivar apertura automática del navegador:
 
 El panel escucha solo en loopback (127.0.0.1). No es un servicio público de Internet.
 
+## Ejemplo público reproducible: SolarisPKN-Labs
+
+El repositorio incorpora un generador **`labs_public_example.py`** y el workflow **`.github/workflows/labs-scan.yml`**. El workflow descarga **solo el checkout público** de [SolarisPKN-Labs](https://github.com/SolarisPKN/SolarisPKN-Labs), ejecuta una indexación estática con Engineer y publica exclusivamente cuatro artefactos en `ejemplos/SolarisPKN-Labs/`: `mapa.html`, `mapa.json`, `diagnostico-relaciones.json` y `README.md`. La salida no contiene el código de Labs, su base SQLite, notas de IA, contraseñas ni rutas absolutas locales. Todos los nodos y aristas publicados deben coincidir con archivos rastreados por Git en el repositorio fuente.
+
+**Importante:** el ejemplo demuestra el análisis actual, no la necesidad o seguridad de eliminar archivos. La generación automatizada requiere GitHub Actions con permiso de escritura; un error de validación detiene el commit.
+
 ## Auditoría de relaciones semánticas y carpetas
 
 El auditor de **SolarisPKN-Labs** mostró vínculos omitidos que ahora cubre el motor reutilizable `project_semantics.py` para cualquier proyecto compatible:
