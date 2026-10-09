@@ -6,6 +6,7 @@ encrypted and failed nodes directly from SQLite even before the first export.
 from __future__ import annotations
 
 import json
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 from graph_structure import enrich_with_directories
@@ -18,7 +19,7 @@ MAX_VIEW_EDGES = 18000
 def graph_snapshot(db_path: Path) -> dict:
     if not db_path.is_file():
         return {"nodes": [], "edges": [], "live": True}
-    with sqlite3.connect(str(db_path), timeout=5) as db:
+    with closing(sqlite3.connect(str(db_path), timeout=5)) as db:
         db.row_factory = sqlite3.Row
         try:
             row = db.execute("SELECT value FROM metadata WHERE name='project_root'").fetchone()
@@ -72,7 +73,7 @@ def graph_snapshot(db_path: Path) -> dict:
 def status_snapshot(db_path: Path) -> dict:
     if not db_path.is_file():
         return {"statuses": {}, "count": 0}
-    with sqlite3.connect(str(db_path), timeout=4) as db:
+    with closing(sqlite3.connect(str(db_path), timeout=4)) as db:
         rows = db.execute("SELECT key,status FROM nodes ORDER BY id LIMIT ?", (MAX_VIEW_NODES,)).fetchall()
         total = db.execute("SELECT count(*) FROM nodes").fetchone()[0]
     return {"statuses": dict(rows), "count": total}

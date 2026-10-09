@@ -7,6 +7,7 @@ as production provenance rather than a runtime dependency.
 """
 from __future__ import annotations
 from collections import defaultdict, deque
+from contextlib import closing
 from pathlib import PurePosixPath
 
 PRODUCTION={"generates","produces","writes-output"}
@@ -117,7 +118,7 @@ def impact_from_sqlite(db_path, key, max_items=10000, max_depth=25):
     edges=[]
     visited={key}
     frontier=[key]
-    with sqlite3.connect(str(db_path),timeout=15) as db:
+    with closing(sqlite3.connect(str(db_path),timeout=15)) as db:
         db.row_factory=sqlite3.Row
         node=db.execute("SELECT key,status,kind FROM nodes WHERE key=?",(key,)).fetchone()
         if node is None:
