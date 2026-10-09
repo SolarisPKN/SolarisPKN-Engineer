@@ -1,142 +1,158 @@
 # SolarisPKN-Engineer
 
-**Analizador local experimental de dependencias, archivos, binarios e impacto inverso, con grafo interactivo y documentación opcional mediante IA.**
+**Experimental local dependency and reverse-impact analyzer for source code, binary imports, project assets, and optional AI documentation.**
 
-[English](README.en.md) | Español
+**English** | [Español](README.es.md)
 
-> **Estado:** `v0.1.0-alpha` (experimental). El escaneo estático puede omitir relaciones dinámicas; la ausencia de enlaces no demuestra que un archivo sea seguro para borrar. El EXE y las pruebas interactivas de Windows requieren validación antes de considerarlo estable.
+> **Status:** `v0.1.0-alpha` (experimental). Static parsing can miss runtime-computed references. No inbound links is not proof that a file can be safely deleted. A compiled Windows EXE and interactive tray still require independent validation.
 
-## Propósito
+## Screenshots
 
-SolarisPKN-Engineer crea un mapa persistente de cómo se relacionan archivos fuente, ejecutables, bibliotecas y recursos. Recorre dependencias transitivas, evita analizar nodos duplicados, sobrevive a interrupciones y genera tanto un grafo HTML propio como notas para Obsidian. Un módulo de IA opcional lee fragmentos de código, comenta su función y mantiene un índice enlazado.
+Explore SolarisPKN-Engineer's dependency graphs, folder navigation, and file inspection. These screenshots show an example analysis of publicly tracked SolarisPKN-Labs files.
 
-No instala dependencias, ejecuta EXE desconocidos ni modifica intencionalmente los archivos originales.
+### Dependency inspector
 
-## Bandeja de Windows (tray) — abrir, reiniciar y cerrar
+![SolarisPKN-Engineer file inspector with dependency evidence](docs/screenshots/dependency-inspector.webp)
 
-Desde esta versión, **INICIAR_ENGINEER.cmd** inicia el nuevo `tray_launcher.py`. Usa el sistema de bandeja de Windows a través de `ctypes` (sin bibliotecas Python adicionales), con una única instancia activa por usuario.
+### Folder overview
 
-- **Doble clic en el ícono:** abrir el panel web en `http://127.0.0.1:8765/`.
-- **Clic derecho → Abrir panel:** abrir el navegador.
-- **Estado del motor:** saber si el servidor de Engineer está activo y si está analizando.
-- **Reiniciar Engineer:** pedir al servidor un cierre ordenado, detener el trabajo en el siguiente punto seguro y volver a iniciar el proceso.
-- **Cerrar Engineer por completo:** cerrar el servidor y quitar el icono de la bandeja; no cerrar SolarisPKN-IA, Bridge ni procesos ajenos.
+![Folder-based overview of analyzed files](docs/screenshots/folder-overview.webp)
 
-Si el motor está analizando, Engineer solicita confirmación antes de interrumpirlo. La cola queda en SQLite; el archivo que se estaba procesando se reanaliza si no alcanzó a confirmar su resultado. Si el servidor no termina durante 15 segundos, aparece una **segunda confirmación** para finalizar por la fuerza el proceso de Engineer y sus subprocesos. No se fuerzan cierres sin permiso explícito.
+### Folder node map
 
-Al cerrar el servidor se detienen nuevas tareas y se espera a los trabajos activos. Para grandes archivos o llamadas IA bloqueadas, la salida puede no ser inmediata. Los resultados ya confirmados se conservan.
+![File nodes grouped by folder in the dependency map](docs/screenshots/folder-node-map.webp)
 
-**Primer cambio desde una versión anterior:** cerrá la consola antigua de `server.py` antes de iniciar el nuevo tray; el supervisor no se apropia de servidores ajenos que estén usando el puerto 8765. Si aparece un conflicto, cerrá la instancia antigua y seleccioná **Reiniciar Engineer** desde la bandeja.
+> **Note:** Screenshots represent an example analysis. Counts and processing status may differ across projects and versions.
 
-**Empaquetado:** `COMPILAR_EXE.cmd` usa ahora `tray_launcher.py` como punto de entrada del ejecutable. El script existe, pero el EXE aún requiere compilación y validación con PyInstaller en el Windows anfitrión. El registro de errores del proceso gestionado se encuentra en `.private/server-process.log`.
+## 1. Overview
 
-## Requisitos y ubicación
+SolarisPKN-Engineer explores source code and binaries, records which files depend on which others, and builds a navigable graph. It uses an iterative SQLite-backed queue, allowing interruption, restart and limited parallelism without recursive stack growth. It also exports a self-contained HTML graph and an Obsidian-compatible Markdown vault.
 
-- Python 3.10 o superior. El motor y el servidor web utilizan la biblioteca estándar.
-- Git en PATH, opcional para el historial.
-- Navegador web moderno.
-- Para IA: Ollama local o endpoint HTTP compatible con OpenAI.
-- Para un EXE portable: PyInstaller, opcional.
+An **optional** AI integration reads bounded source excerpts (or binary import metadata), summarizes what each file does, and builds linked documentation indexes. Source inspection is independent of AI availability.
 
-Instalación: extraé o cloná el repositorio en una carpeta propia con permisos de escritura, por ejemplo `SolarisPKN-Engineer/`. El programa no necesita la carpeta privada de desarrollo de Solaris.
+The tool **does not execute inspected binaries, install dependencies or intentionally modify inspected projects**.
 
-### Abrir la interfaz en Windows
+## Windows system tray — Open, Restart, Quit
 
-Doble clic en **INICIAR_ENGINEER.cmd**, o desde PowerShell:
+**INICIAR_ENGINEER.cmd** now launches `tray_launcher.py`, a native Windows notification-area application implemented with `ctypes` and the standard Python library. It enforces one tray instance per Windows session.
+
+- **Double-click the tray icon:** open `http://127.0.0.1:8765/`.
+- **Right-click → Open panel:** launch the browser.
+- **Engine status:** display server activity and whether a project is being processed.
+- **Restart Engineer:** request a cooperative checkpointed stop, then start a new Engineer server process.
+- **Quit Engineer completely:** stop only the Engineer server (and any Engineer-owned child workers) and remove its notification-area icon.
+
+If analysis is in progress, Engineer requests confirmation before interruption. Completed nodes remain committed in SQLite and interrupted work is resumable. If graceful shutdown exceeds 15 seconds, the tray asks for **separate confirmation** before force-stopping the owned process tree. It never intentionally terminates SolarisPKN-IA, the Solaris Bridge, or unrelated applications.
+
+**Migration note:** when upgrading from an old console-based launch, stop that previous `server.py` first. The tray will not take over an unrelated process already listening on port 8765; close the old instance, then choose Restart in the tray.
+
+**Windows EXE build:** `COMPILAR_EXE.cmd` now packages `tray_launcher.py` as the executable entry point. A compiled EXE has not yet been built/tested on the Windows host. Process errors are logged under `.private/server-process.log`.
+
+## 2. Requirements
+
+- Python **3.10+**; runtime requires only the Python standard library.
+- Git on PATH (optional, for file history).
+- Modern web browser.
+- Ollama or an OpenAI-compatible API (optional, for AI descriptions).
+- PyInstaller (optional, for a standalone Windows EXE).
+
+Install by cloning or extracting this repository into any user-writable directory, e.g. `SolarisPKN-Engineer/`. The private Solaris development environment is not required.
+
+### Windows: start the browser application
+
+Double-click **INICIAR_ENGINEER.cmd** or run:
 
     cd .\SolarisPKN-Engineer
     py -3 tray_launcher.py
 
-Para ejecutar solamente el servidor, sin el icono de bandeja:
+To run only the web server without a tray icon:
 
     py -3 server.py
 
-Abrir: **http://127.0.0.1:8765/**
+Open **http://127.0.0.1:8765/**.
 
 Linux/macOS:
 
     python3 server.py
 
-Desactivar apertura automática del navegador:
+To disable automatic browser opening:
 
     python3 server.py --no-browser
 
-El panel escucha solo en loopback (127.0.0.1). No es un servicio público de Internet.
+The server binds to **127.0.0.1 only**. Do not expose it publicly without additional security engineering.
 
-## Ejemplo público reproducible: SolarisPKN-Labs
+## Reproducible public SolarisPKN-Labs example
 
-El repositorio incorpora un generador **`labs_public_example.py`** y el workflow **`.github/workflows/labs-scan.yml`**. El workflow descarga **solo el checkout público** de [SolarisPKN-Labs](https://github.com/SolarisPKN/SolarisPKN-Labs), ejecuta una indexación estática con Engineer y publica exclusivamente cuatro artefactos en `ejemplos/SolarisPKN-Labs/`: `mapa.html`, `mapa.json`, `diagnostico-relaciones.json` y `README.md`. La salida no contiene el código de Labs, su base SQLite, notas de IA, contraseñas ni rutas absolutas locales. Todos los nodos y aristas publicados deben coincidir con archivos rastreados por Git en el repositorio fuente.
+The **`labs_public_example.py`** generator and **`.github/workflows/labs-scan.yml`** use a fresh checkout of the [public SolarisPKN-Labs repository](https://github.com/SolarisPKN/SolarisPKN-Labs). Engineer runs a static scan, then publishes exactly four allowlisted files under `ejemplos/SolarisPKN-Labs/`: `mapa.html`, `mapa.json`, `diagnostico-relaciones.json`, and `README.md`. The example includes only Git-tracked public file names, graph links and status labels—never Labs source content, SQLite indexes, secrets, AI comments or local absolute paths. Automatic publication requires GitHub Actions write permission and fails closed on validation errors.
 
-**Importante:** el ejemplo demuestra el análisis actual, no la necesidad o seguridad de eliminar archivos. La generación automatizada requiere GitHub Actions con permiso de escritura; un error de validación detiene el commit.
+An example scan illustrates the current static analysis coverage; **it cannot prove that any file is safe to remove**.
 
-## Auditoría de relaciones semánticas y carpetas
+## Semantic dependency and directory relationship audit
 
-El auditor de **SolarisPKN-Labs** mostró vínculos omitidos que ahora cubre el motor reutilizable `project_semantics.py` para cualquier proyecto compatible:
+SolarisPKN-Labs exposed missing links that are now covered by reusable **`project_semantics.py`** rules for future compatible projects:
 
-- Fuentes (`@font-face url(...)`, CSS y `<link href=...>`), imágenes HTML/MDX y medios enlazados con rutas `/public`.
-- Metadatos JSON anidados (`heroImage`, `images`, `imagen`, `imagenes`, `portada`, `foto` y otras claves en inglés/español), incluidos certificados del portfolio.
-- Aliases declarados en `astro.config.mjs`, `tsconfig.json` y `jsconfig.json` (por ejemplo `@styles`, `@components`, `@locales`).
-- Imports dinámicos literales con variables de segmento (`import(`...${lang}...`)`), patrones `import.meta.glob` y rutas construidas con `path.join` que se pueden resolver por inspección estática sin ejecutar código. Las expansiones se marcan como **inferidas**.
-- Relación entre metadatos de una publicación (`post.json`), versiones localizadas `index-es.mdx`/`index-en.mdx` y traducciones del post si existen en las carpetas correspondientes.
-- **Pertenencia a carpetas** en mapas HTML, JSON y Obsidian. Las aristas `contains` usan la ruta real del sistema de archivos y son **estructurales**, no dependencias de ejecución. El motor de impacto en SQLite no incluye estas aristas para evitar falsos impactos entre archivos vecinos.
+- Web fonts via CSS `@font-face url(...)` and HTML preload links; HTML, MDX and public image/media references.
+- Nested JSON metadata (`heroImage`, `images`, Spanish `imagen`, `portada`, `foto`, etc.), including portfolio certification images.
+- Configured Astro/Vite/TypeScript aliases from `astro.config.mjs`, `tsconfig.json` and `jsconfig.json`.
+- Literal/template dynamic imports, `import.meta.glob` patterns, and bounded `path.join` path construction, strictly without executing inspected project code. Expanded relationships are labeled **inferred**, not runtime-confirmed.
+- Blog post metadata linked to localized MDX content and matching translation files when they actually exist.
+- Real filesystem folder hierarchy is exposed as **structural `contains` relationships**, separately from semantic imports. SQLite dependency and impact traversals remain unaffected by directory containment.
 
-La exportación ahora también genera `diagnostico-relaciones.json`, que distingue archivos referenciados desde otros archivos, posibles puntos de entrada, recursos estáticos sin referencias detectadas y nodos externos no resueltos. **Un archivo sin referencias entrantes no está necesariamente sin uso**: puede ser una ruta, artefacto publicado, archivo de configuración, prueba o recurso invocado desde otro sistema.
+Exports also include **`diagnostico-relaciones.json`**, listing incoming semantic-link coverage, possible entry points, unreferenced public resources, and unresolved external references. **Zero incoming edges does not prove a file is unused.**
 
-**IMPORTANTE tras esta actualización:** reiniciá Engineer, activá **Reanalizar** y analizá **Todo el directorio** de SolarisPKN-Labs. Los vínculos nuevos no aparecen retroactivamente en los nodos ya marcados como completos. Exportá nuevamente el mapa para obtener también el diagnóstico actualizado. No es necesario eliminar `indice.sqlite`.
+**To apply this to an existing index:** restart Engineer, select **Reanalyze** and **Entire directory**, then re-export the map. No SQLite deletion is required. The new test module `tests/test_labs_semantic_edges.py` exercises synthetic versions of the audited patterns without executing untrusted project code.
 
-Los tests `tests/test_labs_semantic_edges.py` recrean de forma sintética los casos encontrados. No ejecutan código de los proyectos auditados. La cobertura es progresiva: una resolución estática de plantillas no demuestra ejecución efectiva de cada rama ni equivale a un AST semántico completo de cada lenguaje.
+## Redesigned workspace and folder-based graph
 
-## Nuevo espacio de trabajo y mapa por carpetas
+The browser application now gives most of its space to the **interactive dependency map**, including on 1360–1366px screens.
 
-La pantalla ahora prioriza **el mapa visual**, con una distribución compacta para monitores de 1360–1366 px y diseños responsivos:
+- **Collapsible left navigation:** Projects, Activity log, Integrations, Hardware. Logs no longer consume map height.
+- **Compact project toolbar:** start analysis directly; expand **Configure analysis** for path, AI, export and refresh options.
+- **Right panel with tabs:** Files, Inspector, Scope. These views no longer stack vertically into an excessively long sidebar.
+- **View presets:** Map + file tree, Map only, Tree only and Wide map. Press Escape to leave wide map.
+- **Folder overview:** nodes are grouped by location with traffic-light status bars; only 6–12 groups appear per page at a readable size. Clicking a folder opens its detailed nodes.
+- **Contextual dependency edges:** show local relationships for a selected file by default, with an optional Show All edges mode.
+- **Synchronized selection:** a node chosen from the graph opens its details and can be located within the tree.
 
-- **Menú izquierdo plegable:** Explorador de proyectos, Registro de actividad, Integraciones y Hardware. El registro deja de quitar altura al grafo.
-- **Barra superior compacta:** permite iniciar el análisis sin desplegar todas las opciones; `Configurar análisis` muestra/oculta ruta, IA, exportación, escaneo total y actualización.
-- **Panel derecho con pestañas:** `Archivos`, `Inspector` y `Sector`. Ya no se apilan el árbol, todas las dependencias y la configuración de alcance en una sola columna interminable.
-- **Vistas:** `Mapa + árbol`, `Solo mapa`, `Solo árbol` y `Pantalla amplia`. La tecla `Esc` sale de pantalla amplia.
-- **Mapa inicial por carpetas:** agrupa nodos, muestra barras de estados verde/amarillo/rojo y limita a 6–12 grupos por página para que los títulos sigan siendo legibles. Al elegir un grupo, aparece el detalle de archivos. El zoom sigue al cursor.
-- **Relaciones contextuales:** para no convertir el mapa en una telaraña, las líneas aparecen sobre todo cuando seleccionás un nodo. `Relaciones: todas` permite mostrar el conjunto completo cuando te resulte útil.
-- **Árbol y mapa sincronizados:** seleccionar un archivo en cualquiera de las vistas permite localizarlo en el otro y consultar sus dependencias en `Inspector`.
+Solaris's separate screenshot observation system is not part of Engineer: it requires explicit authorization through the Solaris tray and does not automatically upload captures.
 
-El sistema opcional de observación de Solaris (capturas por pantalla desde su propio tray) no forma parte del ejecutable Engineer: requiere consentimiento explícito y no envía imágenes automáticamente.
+## 3. Analyze a project through the browser
 
-## Interfaz web: primer análisis
+1. Enter a full local directory or file path, e.g. C:\Apps\Example\Example.exe.
+2. Click **Agregar proyecto / Add project**. An internal project workspace is created **inside Engineer**, leaving the original application untouched.
+3. Choose the worker count. Use **1** for minimal resource usage, or 2/4/8/16 for concurrent inspection. Select **Threads** for lower overhead or **Processes** to use multiple CPU cores. The web UI can set the maximum file size from 32 MiB up to 2 GiB.
+4. Optionally enable the full-tree scan rather than only the selected entry point.
+5. Optionally enable AI commentary and choose its provider, model, endpoint, and language.
+6. Start the scan. The application writes progress, errors, file hashes and dependency edges to SQLite.
+7. Browse the interactive graph and inspect dependency evidence, AI summaries and reverse-impact paths. A full file-content preview tab is planned for a later release.
+8. Regenerate the graph and Markdown documentation after changes.
 
-1. En **Ruta de carpeta, archivo o EXE** indicar el original: ejemplo C:\Apps\MiPrograma\MiPrograma.exe.
-2. Pulsar **Agregar proyecto**. Se crea un directorio de datos dentro del Engineer, no en el programa original.
-3. Seleccionar cantidad de **workers**: 1 para mínimo consumo; 2, 4, 8 o 16 para paralelismo. Elegir **Hilos** para consumo menor o **Procesos** para usar varios núcleos de CPU. El panel permite ajustar el límite máximo por archivo (32 MiB a 2 GiB).
-4. Si se desea indexar también archivos sin relación con la entrada principal, activar **Escanear todos los archivos conocidos**.
-5. Opcionalmente activar **Explicar archivos con IA**, indicando proveedor, URL, modelo e idioma.
-6. Pulsar **Analizar**. Un trabajo local crea o reanuda el índice SQLite, luego exporta el mapa.
-7. Navegar con zoom, arrastre, búsqueda y clic sobre cada nodo; el panel derecho muestra relaciones, origen de enlaces, comentarios de IA e impacto inverso. La vista previa de contenido completa queda planificada para una versión posterior.
-8. Pulsar **Regenerar mapa y notas** para actualizar visualizaciones.
+While the server process remains open, it can run a scan in a local worker thread. When the process exits, work stops, but progress is persisted; starting the scan again continues pending files.
 
-El trabajo local sigue activo mientras esté abierto el servidor. Si este se cierra, la cola sigue guardada, pero el proceso se detiene. Reiniciando el panel y lanzando el mismo análisis se continúa desde los pendientes.
-
-## Estructura de carpetas por programa
+## 4. Per-project internal storage
 
     SolarisPKN-Engineer/
-      engineer.py                  Motor recursivo / CLI
-      ai_analysis.py               Explicaciones IA y caché
-      binary_readers.py            Despachador de binarios
-      pe_reader.py                 Imports PE Windows
-      elf_reader.py                DT_NEEDED Linux
-      macho_reader.py              Bibliotecas Mach-O Apple
-      workspace.py                 Directorios de proyectos
-      server.py                    Servidor web local
-      dashboard_v2.html            Centro de control con pestañas
-      visualizer.html              Grafo navegable
-      export_graph.py              Exportación HTML/JSON/Markdown
-      INICIAR_ENGINEER.cmd         Lanzador Windows
-      COMPILAR_EXE.cmd             Empaquetado Windows
+      engineer.py
+      ai_analysis.py
+      binary_readers.py
+      pe_reader.py
+      elf_reader.py
+      macho_reader.py
+      workspace.py
+      server.py
+      dashboard_v2.html
+      visualizer.html
+      export_graph.py
       README.md
-      README.en.md
+      README.es.md
+      INICIAR_ENGINEER.cmd
+      COMPILAR_EXE.cmd
       tests/
       proyectos/
-        mi-programa-<identificador>/
-          proyecto.json            Origen, entrada y metadatos
-          indice.sqlite            Nodos, aristas y descripciones IA
-          actividad.log            Registro de análisis
+        example-<stable-id>/
+          proyecto.json
+          indice.sqlite
+          actividad.log
           mapa/
             mapa.json
             mapa.html
@@ -145,207 +161,209 @@ El trabajo local sigue activo mientras esté abierto el servidor. Si este se cie
               Indice-IA.md
               Archivos/
                 Indice.md
-                <notas individuales>.md
+                <individual-file-notes>.md
 
-La carpeta **proyectos** es parte del Engineer. Los originales se mantienen donde estén. Los resultados quedan fuera de Git por las reglas de .gitignore. Cada proyecto se identifica por ruta y archivo de entrada para evitar conflictos de nombres.
+- **proyecto.json**: original root directory, entry file, creation metadata.
+- **indice.sqlite**: deduplicated file nodes, typed edges, states, hashes, and AI notes.
+- **actividad.log**: local progress messages and errors.
+- **mapa.json**: complete exported nodes, relations and available AI notes.
+- **mapa.html**: an independent browser graph with zoom, pan, search, and node details.
+- **Obsidian/Archivos**: linked Markdown notes for every indexed node.
+- **Obsidian/Indice-IA.md**: global index of AI-generated file explanations.
 
-## Algoritmo incremental y resistente
+All files belong to Engineer's internal **proyectos** folder. They are excluded from Git by .gitignore, because analyses may contain confidential paths, names, history and content.
 
-Ejemplo: A depende de B y C; B depende de E y F; F depende de H; C depende de H e I.
+## 5. Progressive graph algorithm
 
-- A se agrega a la cola persistente y se analiza.
-- B y C se descubren y se agregan como pendientes.
-- Un worker prioriza profundidades mayores, hasta que ya no quedan dependencias de ese camino.
-- H aparece por dos caminos pero se analiza una sola vez; se conservan ambas relaciones.
-- Si A referencia de vuelta a B, el ciclo no repite el escaneo infinito.
-- Con varios workers, distintas ramas avanzan simultáneamente. El orden de finalización no está garantizado.
-- SQLite guarda estados pending, running, done, failed y external; tras interrupción, running vuelve a pending.
-- El fracaso de un archivo no detiene a los demás; el fallo queda registrado por nodo.
-- Se registra un SHA-256 por archivo. La actualización manual --refresh reanaliza nodos existentes; la detección automática de archivos cambiados todavía no es completa.
+Example: A depends on B and C; B depends on E and F; F depends on H; C depends on H and I.
 
-Límites predeterminados: 32 MiB por archivo y 4 MiB para texto fuente, para no disparar consumo de memoria. No implica que todo el grafo se mantenga en RAM durante el escaneo.
+The engine records A, then discovers B/C, follows pending branches, and records shared dependency H **only once** while preserving both incoming edges. With one worker, deeper discovered nodes are prioritized. Multiple workers process independent pending files concurrently. Cycles do not cause infinite recursion.
 
-## Qué se puede analizar
+The SQLite queue tracks **pending**, **running**, **done**, **failed**, and **external** states. Each file is committed individually, with timestamp, SHA-256, and edges. On restart, unfinished running nodes return to pending. Errors are captured per file and do not stop the rest of the scan.
 
-| Entrada | Mecanismo | Límites |
+Source text is initially capped at 4 MiB and any scanned file at 32 MiB by default. External unresolved references are indexed but are **not automatically downloaded or executed**.
+
+Current limitation: incremental analysis is restartable, but automatic full change detection is incomplete; explicitly request **--refresh** to re-index existing files.
+
+## 6. Supported inputs and confidence
+
+| Format | Current inspection | Main limitations |
 |---|---|---|
-| Python PY/PYI | AST, imports y referencias literales | Imports dinámicos con nombres variables |
-| JS/TS JSX/TSX/MJS/CJS | Imports, require, carga literal | Aliases y resolución de bundlers |
-| Astro/MDX/HTML/CSS y estilos modernos | Imports estáticos de componentes, recursos y aliases `@/` y `~/` | Imports dinámicos, plantillas interpoladas, transformaciones de bundlers |
-| C/C++ | Inclusiones preprocesador literales | Macros y configuraciones de compilación |
-| Java/Kotlin, C#, Go, Rust, PHP, Ruby | Patrones básicos de referencias | No hay semántica profunda completa |
-| Manifiestos npm/pip/Cargo/Go | Dependencias declaradas iniciales | Lockfiles y versiones de ejecución parciales |
-| Windows EXE/DLL/SYS/OCX | Imports declarados PE; cadenas heurísticas | Carga dinámica, packers, ofuscación |
-| ELF Linux | DT_NEEDED en formatos habituales | Cargas dinámicas y formatos avanzados |
-| Mach-O macOS | Comandos de carga en formatos thin | Ejecutables fat y variantes |
+| Python PY/PYI | AST imports and literal references | Runtime-computed names and plugins |
+| JavaScript / TypeScript | Literal imports, require and dynamic import strings | Bundler alias / package resolution |
+| Astro/MDX/HTML/CSS and related styles | Static component imports, local assets, `@/` and `~/` source aliases | Computed imports, templated paths and bundler transformations |
+| C / C++ | Literal include directives | Macros and compiler-specific resolution |
+| Java, Kotlin, C#, Go, Rust, PHP, Ruby | Basic syntactic patterns | Not complete semantic parsers |
+| npm / pip / Cargo / Go manifests | Initial declared dependency discovery | Lockfiles and exact versions are partial |
+| Windows EXE/DLL/SYS/OCX | PE import tables, fallback string hints | Dynamic loads, packing, obfuscation |
+| Linux ELF binaries | DT_NEEDED for supported layouts | dlopen and advanced layouts |
+| macOS Mach-O | Thin binary library load commands | Universal/fat binaries and advanced variants |
 
-Los nombres de bibliotecas locales descubiertos en un EXE se buscan dentro del proyecto y se encolan recursivamente. Los demás se anotan como dependencias externas. Un nombre encontrado solo por cadena queda marcado como heurístico, no confirmado.
+For a binary import name matching another local library, the engine can follow that file recursively. Names not resolved inside the project are recorded as external dependencies.
 
-Las referencias declaradas no demuestran por sí mismas que una dependencia sea indispensable. El motor tampoco reemplaza a un descompilador completo.
+**Declared** references and **heuristic** string matches are distinct evidence levels. A declared import is not proof that the dependency is essential. A string in a binary is not proof that it loads a library. Binary inspection never runs the target application.
 
-## IA por archivo
+## 7. Optional per-file AI explanations
 
-Es **opt-in**. El detector de dependencias funciona aun sin IA.
+AI does **not** discover or certify graph edges: it produces a separate interpretive documentation layer.
 
-Config local sugerida en Solaris:
+Default local configuration:
 
-    Proveedor: ollama
-    URL: http://127.0.0.1:11435/api/chat
-    Modelo: qwen2.5-coder:7b
-    Idioma: es
+    Provider: ollama
+    Endpoint: http://127.0.0.1:11435/api/chat
+    Model: qwen2.5-coder:7b
+    Language: es (English: en)
 
-La IA recibe un fragmento limitado del archivo fuente y las relaciones detectadas. En binarios EXE no recibe código descompilado: solo los nombres y tipos de importaciones detectadas. Devuelve un documento estructurado con resumen, responsabilidades, símbolos importantes, entradas/salidas, notas y límites.
+Each request contains bounded source text and already discovered static references. For binary files, the model receives import metadata only, **not decompiled source**.
 
-Se guarda en SQLite con SHA-256 del archivo + configuración del modelo + versión del prompt. Se reutiliza al reanudar; si el modelo está desconectado registra fallo, no elimina ni invalida los resultados mecánicos.
+Expected structured output:
+- Short file purpose.
+- Main responsibilities.
+- Important symbols.
+- Inputs and outputs.
+- Technical notes.
+- Limitations and uncertainty.
 
-La exportación añade:
-- **Comentario de IA** dentro de cada nota Markdown individual.
-- **Indice-IA.md** con lista enlazada de todas las explicaciones.
-- Resumen IA en el panel de inspección del mapa HTML y en mapa.json.
+Each explanation is persisted in SQLite, cached by **source SHA-256 + model configuration + prompt version**, and exported to the Markdown file, **Indice-IA.md**, the JSON graph and HTML inspector. If the AI endpoint is unavailable, mechanical graph indexing remains intact. Failed AI notes can be retried.
 
-Los resúmenes son **interpretaciones del modelo, no pruebas de ejecución**.
+Model output is labeled **unverified AI commentary**, not a tested fact.
 
-### Conectar una IA remota
+### Remote AI providers
 
-Seleccionar proveedor **openai**, especificar un endpoint HTTPS compatible (por ejemplo una ruta /v1/chat/completions) y activar explícitamente **Permitir enviar código a una IA remota**. La clave se pasa por la variable de entorno **ENGINEER_AI_API_KEY**.
+Select provider **openai**, provide an OpenAI-compatible HTTPS chat completion endpoint and model, and explicitly enable **remote AI transfer**. Set credentials through the **ENGINEER_AI_API_KEY** environment variable; never place API keys in project files or exported maps.
 
-No enviar proyectos privados o de terceros a servicios remotos sin autorización. Hay filtros básicos de nombres y patrones de secretos; **no garantizan filtrado completo**. Para archivos sensibles, usar IA local o desactivar esta función. Las instrucciones incrustadas dentro del código son datos y no tienen autoridad sobre el motor.
+Only send source you are authorized to disclose. Pattern-based secret filtering is a limited safeguard, not a guarantee that sensitive content will be removed. Use local AI or disable AI for confidential programs.
 
-## CLI para usuarios avanzados
+Instructions found inside source files are treated as untrusted data.
 
-Desde el directorio del Engineer:
+## 8. Command-line interface
 
-    py -3 engineer.py scan "C:\MiProyecto" --entry main.py --db .\datos\mi-proyecto.sqlite --workers 1
+Scan an entry-point source file:
 
-Escaneo de EXE:
+    py -3 engineer.py scan "C:\MyProject" --entry main.py --db .\datos\my-project.sqlite --workers 1
 
-    py -3 engineer.py scan "C:\MiPrograma" --entry MiPrograma.exe --db .\datos\exe.sqlite --workers 4
+Scan a Windows executable:
 
-Indexar todo el árbol:
+    py -3 engineer.py scan "C:\MyApp" --entry MyApp.exe --db .\datos\app.sqlite --workers 4
 
-    py -3 engineer.py scan "C:\MiProyecto" --all --db .\datos\mi-proyecto.sqlite --workers 4
+Scan every recognized file in a tree:
 
-Explicaciones IA después del análisis:
+    py -3 engineer.py scan "C:\MyProject" --all --db .\datos\my-project.sqlite --workers 4
 
-    py -3 engineer.py annotate --db .\datos\mi-proyecto.sqlite
+Scan and request AI commentary:
 
-Con IA desde el escaneo:
+    py -3 engineer.py scan "C:\MyProject" --entry main.py --db .\datos\my-project.sqlite --ai
 
-    py -3 engineer.py scan "C:\MiProyecto" --entry main.py --db .\datos\mi-proyecto.sqlite --ai
+Resume AI commentary or retry failures:
 
-Reintentar IA fallida:
+    py -3 engineer.py annotate --db .\datos\my-project.sqlite
+    py -3 engineer.py annotate --db .\datos\my-project.sqlite --ai-retry-failed
 
-    py -3 engineer.py annotate --db .\datos\mi-proyecto.sqlite --ai-retry-failed
+Export, inspect statistics, inspect Git history:
 
-Exportación y estado:
+    py -3 engineer.py export --db .\datos\my-project.sqlite --output .\salida
+    py -3 engineer.py stats --db .\datos\my-project.sqlite
+    py -3 engineer.py history "C:\MyProject" main.py
 
-    py -3 engineer.py export --db .\datos\mi-proyecto.sqlite --output .\salida
-    py -3 engineer.py stats --db .\datos\mi-proyecto.sqlite
-    py -3 engineer.py history "C:\MiProyecto" main.py
+The web UI creates and manages project workspace paths automatically; the CLI uses the database/output paths you explicitly supply.
 
-El CLI permite rutas personalizadas, mientras que el panel web **organiza automáticamente** los proyectos y resultados en su carpeta interna.
+## 9. Build a standalone Windows EXE
 
-## Compilar un EXE portable
-
-No se requiere EXE para ejecutar el proyecto. Si se desea distribuirlo o abrirlo con doble clic sin depender de Python instalado:
+PyInstaller is optional. To build:
 
     py -3 -m pip install pyinstaller
-
-Después, desde la carpeta del Engineer:
-
     COMPILAR_EXE.cmd
 
-Este script solicita a PyInstaller un archivo **SolarisPKN-Engineer.exe**, con dashboard y visualizador incluidos. Al abrirlo, inicia el supervisor de bandeja y desde allí el servidor local. Los proyectos seguirán almacenándose en la carpeta proyectos del mismo directorio.
+The build script requests a single **SolarisPKN-Engineer.exe** in the same directory as the application's source. Opening it starts the local HTTP server and a browser tab. Project workspaces remain alongside the executable under **proyectos**.
 
-**El script está creado, pero el EXE aún no fue compilado ni validado en tu PC.** Si el Engineer está en una carpeta sin permisos de escritura, mover la distribución a una carpeta propia del usuario.
+This is a browser-based application packaged as a Windows process; the EXE does not replace its interactive HTML UI.
 
-## Bóveda cifrada de contraseñas y tokens (Windows DPAPI)
+**Current status:** the build script exists, but the executable has **not yet been compiled and verified** on the host. Run it from a directory writable by your account.
 
-SolarisPKN-Engineer permite **guardar opcionalmente** contraseñas y claves API dentro de la carpeta interna `.private/credentials.dpapi.json`. La información sensible se cifra mediante **Windows DPAPI (CryptProtectData, alcance usuario actual)**. El archivo únicamente contiene blobs cifrados, identificadores hash opacos y fecha de actualización. La carpeta completa `.private/` está excluida de Git.
+## Encrypted credential vault (Windows DPAPI)
 
-Desde el inspector de un ZIP protegido podés usar **Recordar cifrada para mi usuario de Windows**, **Usar contraseña guardada** o **Eliminar contraseña guardada**. Engineer la conserva solo si la contraseña permitió descifrar al menos un miembro realmente protegido, sin errores de descifrado. La contraseña nunca se devuelve a la página web, y se usa solamente del lado del servidor para el análisis autorizado.
+SolarisPKN-Engineer can **optionally remember** archive passwords, AI provider API keys, and a GitHub token. Credentials are protected with **Windows DPAPI (CryptProtectData, current-user scope)** and stored in `.private/credentials.dpapi.json` under the Engineer application directory. The file contains ciphertext blobs, opaque hashed identifiers, and timestamps; `.private/` is excluded from Git.
 
-Desde **Integraciones** también podés guardar y eliminar claves de Gemini, GPT, Claude y cualquier proveedor configurado, además del token de GitHub. Engineer usa primero una variable de entorno cuando está definida; en su ausencia consulta la bóveda DPAPI. El navegador solo recibe si existe una credencial, jamás su valor.
+For a ZIP, select **Remember encrypted for my Windows account**, **Use saved password**, or **Delete saved password** from the file inspector. A newly provided password is saved only after the application successfully decrypts at least one genuinely encrypted ZIP entry, with no remaining decryption errors. Secret values are never returned to the browser.
 
-**Seguridad y recuperación:**
-- DPAPI protege los datos para el usuario Windows que los guardó; copiar solamente el archivo de la bóveda a otra PC o cuenta **no basta** para descifrarlo. Una reinstalación o pérdida del perfil de Windows puede impedir recuperar las claves. Guardá copias originales en un gestor de contraseñas propio.
-- Las credenciales se descifran **temporalmente en memoria** cuando se necesitan. Malware o procesos que controlen tu sesión pueden representar un riesgo: no existe protección absoluta en un dispositivo comprometido.
-- El sistema no hace descifrado por fuerza bruta, no guarda texto plano ni exporta las claves a Obsidian o al mapa.
-- En plataformas sin Windows DPAPI, la función de guardar secretos se deshabilita expresamente; nunca cambia a un archivo en claro.
-- Al borrar una credencial se elimina la entrada del archivo lógico; esto no garantiza el borrado físico de historiales de disco, backups o memoria.
-- Las claves usadas por servicios externos sí se envían a esos proveedores por HTTPS durante una solicitud autorizada; el código fuente solo se transmite a una IA remota si activaste esa opción.
+In **Integrations**, users can save/delete encrypted API keys for configured AI providers and a GitHub token. If an environment variable is configured, that credential takes precedence; otherwise the application looks in the encrypted vault. The browser can check whether a credential is available but cannot retrieve its value.
 
-## Desbloqueo autorizado de archivos cifrados
+**Security and recovery:**
+- The DPAPI vault is tied to the Windows account/profile that created it. Copying the encrypted file alone to another device/account is not enough for recovery; keep separate backups of original credentials in your own password manager.
+- Credentials are temporarily decrypted in the local application's memory during authorized operations. Malware running within your Windows session may still access secrets.
+- No password guessing, plaintext fallback, or writing keys to Obsidian, exported dependency graphs or application logs.
+- Saving credentials is explicitly disabled on operating systems without the Windows DPAPI backend.
+- Deleting a vault entry does not guarantee secure erasure from disk snapshots, backups, or transient memory.
+- Provider credentials are sent over HTTPS when making an authorized remote API call. Source content is sent to remote AI only with explicit opt-in.
 
-Cuando un archivo está rojo (encrypted), su propietario o una persona autorizada puede elegir un método desde el inspector:
+## Owner-authorized unlocking of encrypted files
 
-- **Contraseña ZIP (ZipCrypto):** introducir la contraseña y confirmar autorización. Engineer lee los miembros en fragmentos, sin extraer fuentes al directorio original ni guardar una copia descifrada en su carpeta. Registra cada miembro en el grafo como nodo de archivo interno, muestra las dependencias disponibles y conserva en rojo los miembros que no pudo leer. La contraseña solo se guarda cuando el usuario marca la opción de recordarla; se cifra con DPAPI y solo después de comprobar el descifrado.
-- **Copia ya descifrada por el propietario:** para otros cifrados, el usuario utiliza su herramienta autorizada e indica la ruta del archivo o carpeta descifrada. Engineer crea un proyecto separado y una relación de procedencia declarada por el usuario; todavía necesita escanearse. Este método no significa que Engineer pueda romper el cifrado.
+For a red (encrypted) file, its owner or another authorized person can choose a method in the inspector:
 
-**Límites:** Python ZipFile soporta cifrado tradicional ZipCrypto, no WinZip AES. La contraseña no se guarda en texto plano; si optás por recordarla se cifra mediante DPAPI. Los nombres y las relaciones descubiertas sí se registran. Los archivos y los paquetes enormes todavía pueden consumir recursos importantes y algunos formatos requieren nuevos adaptadores.
+- **ZIP password (ZipCrypto):** enter a ZIP password and confirm authorization. Engineer streams archive members without extracting source code to the original project or persisting a decrypted copy. Each readable member is represented in the dependency graph; members that cannot be read remain red. Passwords are saved only if the user opts in, encrypted with DPAPI after successful decryption.
+- **Already-decrypted owner-provided copy:** for other encryption schemes, the user can run their own trusted decryption application and provide the resulting file or directory. Engineer registers a separate project and records a user-declared provenance link. The new project still needs to be scanned; this does not imply native support for the encryption algorithm.
 
-## Motor de uso e impacto inverso (nuevo)
+**Limitations:** Python ZipFile supports traditional ZipCrypto, not WinZip AES. Passwords are never stored in plaintext; optionally saved passwords are protected by Windows DPAPI. Member filenames and discovered dependency edges are still persisted. Very large archives may still require significant resources and advanced formats need specialized adapters.
 
-**No confundir archivo leído con archivo utilizado.** El semáforo verde/amarillo/rojo representa progreso de lectura; un anillo celeste en el grafo marca referencias declaradas, un anillo ámbar marca inferencias y un anillo violeta señala posibles puntos de entrada. Sin anillo **no significa que sea seguro borrarlo**.
+## Reverse usage and impact analyzer
 
-Al seleccionar un archivo en el mapa o el árbol, Engineer muestra ahora su **grafo local de dos niveles** y la ficha **Uso e impacto**:
+**Read successfully does not mean used, and no detected import does not mean safe to delete.** Green/yellow/red dots still indicate analysis progress. Cyan outlines show declared inbound references, amber outlines inferred inbound references, and purple outlines potential entrypoints. A missing outline has no deletion-safety implication.
 
-- **Referenciado:** otro archivo declara su utilización (por ejemplo, el JSON de una publicación referencia su imagen).
-- **Posible uso:** relación inferida por alias, plantilla o patrón dinámico; requiere validación.
-- **Entrada/configuración:** página, script o configuración que puede no tener importadores dentro del proyecto.
-- **Uso no determinado:** ningún importador descubierto con la cobertura actual; no equivale a archivo obsoleto.
-- **Producido por:** arista `generates` aparte de las aristas de uso. Un script creador de posts puede producir archivos de imágenes, metadatos y traducciones, pero eso no demuestra que se consuman durante la ejecución.
+Selecting a file now opens a **two-level relationship neighborhood** and a **Usage and impact** inspector. The reverse analyzer follows incoming consumer links, including multi-hop paths to route/script/configuration entrypoints; it labels direct declared versus inferred evidence and limits potentially huge graph traversals. The UI keeps consumers distinct from **`generates`** producer provenance.
 
-Los informes consultan el grafo **al revés**, recorriendo consumidores directos y transitivos hasta posibles entradas. No cargan necesariamente todo el grafo en RAM y limitan los resultados de inspección con indicadores de truncamiento.
+For SolarisPKN-Labs, the post creator can produce existing MDX/JSON/image/locale files; a post's `post.json` references its actual `heroImage` and gallery; dynamic Astro routes consume post metadata. This reconstructs navigable relationships from a post image to its corresponding page. Static `settings.json` reads and npm package manifest dependencies are also identified when declared in source.
 
-**Qué detecta en SolarisPKN-Labs:** `scripts/post-service.js` puede generar `src/content/blog/<slug>/post.json`, los contenidos MDX, las traducciones y las imágenes del post; `post.json` declara `heroImage`/`images`; la página dinámica Astro lee los metadatos. Esto permite navegar desde una portada hasta el post y la página. También se reconocen lecturas literales de configuraciones (incluido `settings.json` si existe y el código lo lee) y dependencias de `package.json`.
+**Deletion safety is intentionally unverified** (the API returns `safe_to_delete: null`). Unreferenced means only not found under the installed parsers. For OS-level analysis, package ownership, boot chain, drivers/modules, services, scheduled tasks, runtime loads, external callers and integration tests are essential. Never automatically delete supposedly obsolete OS files based only on a static graph; verify through isolated snapshots/VMs and monitored execution first.
 
-**Estado de borrado:** ningún resultado marca `safe_to_delete=true`. Un archivo sin referencias detectadas es **candidato a investigar**, no candidato a eliminación automática. Antes de declarar obsoleto algo hacen falta análisis de puntos de entrada, scripts de build, imports dinámicos, trazas de ejecución, tests y contexto de despliegue. En un sistema operativo se necesitan además gestor de paquetes, servicios, arranque, registro/symlinks, módulos y cargas en tiempo de ejecución; se recomienda snapshot y prueba en VM antes de cualquier remoción.
+Use `GET /api/impact?project=ID&key=file:PATH` or the UI inspector. Regression fixtures are in `tests/test_impact_usage.py`. Restart Engineer and select **Reanalyze** to update existing indexes.
 
-La API de inspección es `GET /api/impact?project=ID&key=file:RUTA`. Las pruebas sintéticas viven en `tests/test_impact_usage.py`; revisar el repositorio en producción exige reiniciar Engineer y **Reanalizar** para recalcular los vínculos.
+## Traffic-light colors in the graph and file tree
 
-## Semáforo del mapa y el árbol
+- **Green**: file scanning completed (`done`). It does not guarantee complete understanding of the file.
+- **Yellow**: file queued or currently scanning (`pending` / `running`).
+- **Red**: recognized encryption evidence prevents content analysis (`encrypted`), with the reason shown in the inspector. High entropy, unknown extensions, or ordinary errors are not sufficient evidence.
+- **Purple/gray**: other inspection failures (`failed`), including unsupported or corrupt formats.
+- **Blue**: unresolved external dependency (`external`).
 
-- **Verde:** archivo inspeccionado y trabajo terminado (`done`). No implica comprensión total del formato.
-- **Amarillo:** archivo registrado en cola o en proceso (`pending` / `running`).
-- **Rojo:** se detectó un marcador reconocible de cifrado y el motor no puede analizar el contenido (`encrypted`); el inspector muestra el motivo. No se deduce cifrado únicamente por extensión, entropía alta o fallo de lectura.
-- **Violeta/gris:** error de otro tipo (`failed`), por ejemplo archivo dañado o formato todavía no compatible.
-- **Azul:** dependencia externa sin resolver (`external`).
+Directories aggregate descendant statuses: red means at least one indexed descendant was detected as encrypted. The browser graph can refresh status colors during an ongoing scan from a bounded SQLite snapshot. Explicit refresh permits reattempting previously encrypted files.
 
-Los directorios del árbol heredan un color agregado de los archivos indexados: el rojo señala que alguno de ellos está cifrado. El mapa puede refrescar estos estados durante un escaneo largo; para datos nuevos se carga una instantánea limitada del índice SQLite. Archivos cifrados ya conocidos se reintentan mediante `--refresh`.
+## 10. Security, scalability, and limitations
 
-## Seguridad, escalabilidad y límites actuales
+- Read-only inspection of the selected original directory, no binary execution.
+- Localhost web server with Host validation and ephemeral POST token.
+- One background scan/annotation/export job per running server, multiple workers per scan.
+- SQLite prevents repeat work after interruptions and preserves partial progress.
+- Disk, RAM, CPU and source file limits still apply.
+- The graph canvas currently renders at most ~2,200 nodes simultaneously; all are exported to JSON and Markdown. Massive graphs need optimized streaming exports and clustered rendering.
+- No deep decompilation, ETW tracing, runtime plugin observation, package download, full function call graphs or Git timeline edges yet.
+- Git history is available on demand for files inside a Git checkout.
+- API credentials can be stored as environment variables or in the encrypted Windows DPAPI vault; never commit private maps, credentials or source excerpts.
+- GitHub per-file access control is intentionally out of scope.
 
-- No ejecuta binarios inspeccionados ni instala dependencias externas.
-- Lee código fuente de la ruta seleccionada; la salida permanece separada.
-- El servidor usa 127.0.0.1, control de Host y token de sesión para peticiones POST.
-- El motor puede continuar una cola grande, pero disco, CPU, RAM y tamaño de archivos siguen siendo límites reales.
-- Un solo trabajo activo por servidor; varios workers dentro de un trabajo.
-- El visualizador HTML limita a unos 2.200 nodos visibles simultáneamente; JSON y Markdown incluyen todos, pero la exportación de grafos gigantes aún necesita optimización.
-- No está construido todavía el tracing de procesos, análisis dinámico de DLL o plugins ni análisis profundo de funciones o descompilación.
-- Los mensajes de commits y las descripciones de IA pueden contener información privada; no compartir exportaciones sin revisión.
-- No incluye permisos GitHub por archivo, porque decidimos dejarlo fuera.
+## Preparing the first commit (v0.1.0-alpha)
 
-## Preparar el primer commit (v0.1.0-alpha)
+Run **`PREPARAR_GITHUB.cmd`** in the original development folder. It executes the unittest suite first and, on success, stages allowlisted source and tests at `dist/github-export/SolarisPKN-Engineer`. When the local Labs scan and public Git tree manifest are available, it can also add a sanitized scan example. It never copies the Labs source, DPAPI vault, internal databases or private logs. Review the SHA256 manifest before publishing. The helper itself does not commit or push. Full content preview is planned for a later release.
 
-Ejecutá **`PREPARAR_GITHUB.cmd`** desde la carpeta de desarrollo original. Corre la suite de tests y, si pasa, crea `dist/github-export/SolarisPKN-Engineer` con una **lista permitida de archivos fuente y pruebas**. También puede exportar un **ejemplo saneado** de SolarisPKN-Labs cuando su índice local y manifiesto público están disponibles. No incluye originales, contraseñas, archivos de trabajo ni notas de IA. El script no realiza commits ni pushes. Revisá el manifiesto SHA256 antes de publicar. La vista previa completa de archivos queda para una versión posterior.
+## GitHub publication checklist
 
-## Publicación segura en GitHub
+Run **VERIFICAR_REPO.cmd** from the independent Engineer directory and review **RELEASE_CHECKLIST.md**. Keep internal project indexes, `.private/`, credentials, logs and unreviewed screenshots out of Git. The existing public repository is licensed **GNU AGPL-3.0**; retain its `LICENSE` file. Building and testing the optional Windows EXE is a separate release step.
 
-Revisá **RELEASE_CHECKLIST.md** y ejecutá **VERIFICAR_REPO.cmd** para comprobar tests y exclusiones. El repositorio remoto ya existe y contiene una licencia **GNU AGPL-3.0** que debe conservarse. Las pruebas interactivas del tray y la compilación del EXE son verificaciones independientes.
+## 11. Tests and diagnostics
 
-## Diagnóstico y tests
+Run:
 
     py -3 -m unittest discover -s tests -v
 
-Los archivos de test contemplan recorrido transitivo, ciclos, workers, caché, reanudación, salidas de Obsidian, IA simulada sin red y exclusión básica de secretos. Para incidencias, consultar actividad.log dentro de cada proyecto.
+Test files define coverage for recursion, shared nodes, cycles, worker concurrency, recovery, refresh, exporter output, local workspace isolation, AI cache, simulated offline responses and basic sensitive-file filters.
 
-**Validación pendiente:** las pruebas todavía necesitan ejecutarse y confirmarse en el Windows anfitrión; la presencia del código no demuestra una ejecución exitosa.
+See each project's **actividad.log** for failures. Check the AI URL and installed model if annotations fail.
 
-## Próximas fases
+**Verification caveat:** these tests are authored but have not yet been confirmed to pass on the original Windows host.
 
-Resolución de módulos por lenguaje más precisa, lockfiles completos, caché incremental automática, observación dinámica aislada, límites configurables de recursos, historiales temporales de Git integrados, descompilación asistida donde sea legal y posible, agrupación de nodos gigantes, y un EXE compilado y probado.
+## 12. Future roadmap
+
+Stronger parser/resolver plugins, automatic hash refresh, dependency lockfile support, secure package retrieval, sandboxed runtime observation, Git history edges, large-graph clustering, detailed functions/classes analysis, configurable resource budgets, and a tested Windows binary distribution.
 
 ---
 
-Este repositorio distribuye **solo Engineer** y ejemplos públicos saneados. Nunca publiques el árbol privado completo de Solaris ni sus datos de usuario. Licencia del repositorio: **GNU AGPL-3.0**.
+This repository publishes **Engineer only** plus sanitized public examples. Never synchronize the private Solaris host tree. Repository license: **GNU AGPL-3.0**.
