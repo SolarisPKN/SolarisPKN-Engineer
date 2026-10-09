@@ -1,0 +1,33 @@
+# Local analysis databases and generated maps may contain private filenames
+/datos/
+/salida/
+/proyectos/
+/.private/
+/.build/
+/build/
+/dist/
+*.spec
+SolarisPKN-Engineer.exe
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+__pycache__/
+# Extra safeguards against accidentally committing live user secrets or captures
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+*.bak
+*.tmp
+*.iso
+*.img
+*.wim
+*.age
+*.gpg
+# Old dashboard superseded by dashboard_v2.html
+/dashboard.html
+.pytest_cache/
+*.pyc
