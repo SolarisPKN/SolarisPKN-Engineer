@@ -97,7 +97,8 @@ def get_extension(path, query: dict):
 def post_extension(path, data: dict):
     if path == "/api/monitor/add":
         return {"target": get_monitor().add(data.get("target", ""),
-                    data.get("interval_seconds", 300), data.get("algorithm", "sha256"))}
+                    data.get("interval_seconds", 300), data.get("algorithm", "sha256"),
+                    data.get("record_diffs", False))}
     if path == "/api/monitor/verify":
         return verify_local_file(data.get("file", ""), data.get("expected", ""),
                                  data.get("algorithm", "sha256"))
