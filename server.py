@@ -322,6 +322,10 @@ class Handler(BaseHTTPRequestHandler):
                 html = Path(__file__).with_name("dashboard_v2.html").read_text(encoding="utf-8")
                 html = html.replace("/*ENGINEER_TOKEN*/null", json.dumps(self.state.token))
                 return self.send(200, html, "text/html; charset=utf-8")
+            if url.path == "/monitor":
+                html = Path(__file__).with_name("monitor_dashboard.html").read_text(encoding="utf-8")
+                html = html.replace("/*ENGINEER_TOKEN*/null", json.dumps(self.state.token))
+                return self.send(200, html, "text/html; charset=utf-8")
             if url.path == "/api/projects":
                 return self.json(200, {"projects": list_projects()})
             if url.path == "/api/vault/status":
