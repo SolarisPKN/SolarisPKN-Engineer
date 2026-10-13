@@ -23,6 +23,7 @@ import webbrowser
 
 from workspace import app_folder, register, list_projects, paths, load
 from api_extensions import get_extension, post_extension
+from change_monitor import background_loop
 from integrations import find_profile
 from resource_controls import Governor
 from engineer import build_index, inside_root
@@ -321,6 +322,10 @@ class Handler(BaseHTTPRequestHandler):
                 html = Path(__file__).with_name("dashboard_v2.html").read_text(encoding="utf-8")
                 html = html.replace("/*ENGINEER_TOKEN*/null", json.dumps(self.state.token))
                 return self.send(200, html, "text/html; charset=utf-8")
+            if url.path == "/monitor":
+                html = Path(__file__).with_name("monitor_dashboard.html").read_text(encoding="utf-8")
+                html = html.replace("/*ENGINEER_TOKEN*/null", json.dumps(self.state.token))
+                return self.send(200, html, "text/html; charset=utf-8")
             if url.path == "/api/projects":
                 return self.json(200, {"projects": list_projects()})
             if url.path == "/api/vault/status":
@@ -529,6 +534,8 @@ def main():
         cli.error("Choose a port between 1024 and 65535")
     state = State()
     Handler.state = state
+    threading.Thread(target=background_loop, args=(state.stop_event,),
+                     name="engineer-change-observer", daemon=True).start()
     with ThreadingHTTPServer(("127.0.0.1", args.port), Handler) as http:
         http.daemon_threads = True
         url = f"http://127.0.0.1:{http.server_port}/"

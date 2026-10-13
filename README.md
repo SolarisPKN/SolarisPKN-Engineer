@@ -367,3 +367,33 @@ Stronger parser/resolver plugins, automatic hash refresh, dependency lockfile su
 ---
 
 This repository publishes **Engineer only** plus sanitized public examples. Never synchronize the private Solaris host tree. Repository license: **GNU AGPL-3.0**.
+
+## Change Observer — local repositories, public websites and ISO checksums
+
+**New experimental module:** Open the **◉ Monitor SHA-256** tab in Engineer (supports MD5, SHA-256, SHA-512 and optional BLAKE3). Enter an absolute directory path (for example a local Git checkout), a file path, or a public HTTP(S) URL. Select a check interval (60 seconds to 24 hours), click **Start monitoring**, and use **Check now** for immediate validation.
+
+- **Local files/repositories:** record an initial manifest of relative filenames and selected-algorithm fingerprints, then report added, deleted, and modified files. The `.git` folder and common generated dependency directories are excluded. No source file is executed or modified. The graph analyzer remains a separate action.
+- **Public websites:** fetch the HTTP response and hash its bytes with the selected algorithm, and separately compare a normalized text fingerprint to distinguish visible-text changes from technical/raw-response changes. HTTP conditional requests (ETag / Last-Modified) are used when available. This watches **the selected URL only**, not automatically all its CSS, JavaScript, assets, API endpoints or client-rendered output.
+- **Storage:** monitoring settings, fingerprints, bounded text excerpts, filenames and an event timeline are stored in `.private/change-monitor.sqlite`, excluded from Git. Sensitive URLs with query tokens and local file names should not be registered unless the operator accepts their persistence in this private local database.
+- **Opt-in and lifecycle:** nothing is fetched until a target is registered. Automatic checks run while the Engineer application is running, not when its process is closed. An initial baseline does not imply that a change occurred; unchanged checks do not create events.
+- **Safety:** public IP-address validation, DNS pinning, HTTPS certificate checks, localhost/private-network blocking and response size limits defend against server-side request forgery; HTTP redirects are not automatically followed in this initial release. Remote requests do not receive stored AI/GitHub credentials or cookies.
+- **Limits:** max 1 MiB for a web response; up to 8,000 local files per root and selected-algorithm hashes of files up to 32 MiB each. Files larger than 32 MiB use size + mtime as a *metadata-only* marker, not a cryptographic hash. This is a **polling** observer, not an OS filesystem event watcher or a functional website test suite.
+
+To run focused offline tests:
+
+```sh
+python -m unittest discover -s tests -p 'test_change_monitor.py' -v
+```
+
+The monitor detects observed changes, **not their cause**. It does not prove that a game or website is broken, and cannot inspect private backend changes without access.
+
+### Algorithm selection and downloaded ISO validation
+
+Each watched target can use **SHA-256 (default), SHA-512, MD5 (legacy) or BLAKE3**. Re-register the same target to update its interval or algorithm. A different algorithm resets the comparison baseline and logs the change so incompatible digests are never compared. Existing SQLite SHA-256 targets are migrated automatically without erasing historical data.
+
+**BLAKE3 is optional** to keep Engineer's core Python 3.10+ installation dependency-free. To enable it when running from Python, install the package into Engineer's interpreter: `python -m pip install blake3`. For an EXE build, install it in the Python environment *before packaging* (the build must include the optional module). If unavailable, the UI disables BLAKE3; it never silently substitutes SHA-256.
+
+**ISO and large file verification:** In the Monitor panel, select a local file path, the algorithm displayed by the trusted publisher, and the expected hexadecimal digest. Use **Calculate and compare**. The verifier hashes the entire file in 1 MiB chunks (up to 32 GiB) without uploading file contents. This direct verification is distinct from recurring monitoring: in scheduled directory snapshots, files over 32 MiB have only metadata markers. An equal **MD5** digest is useful for legacy interoperability but *not sufficient to establish authenticity against a malicious actor*; obtain the published reference from a trusted channel.
+
+No stored hashes from the legacy SHA-256 mode are discarded unless their owner explicitly switches that target to another algorithm.
+

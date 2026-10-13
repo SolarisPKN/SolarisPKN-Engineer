@@ -1,0 +1,51 @@
+name: Engineer SHA-256 Change Observer tests
+on:
+  push:
+    branches:
+      - feature/change-observer-web-local-20261013
+  pull_request:
+    paths:
+      - change_monitor.py
+      - api_extensions.py
+      - server.py
+      - monitor_dashboard.html
+      - dashboard_v2.html
+      - tests/test_change_monitor.py
+      - .github/workflows/change-observer-tests.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install optional BLAKE3 for test matrix
+        run: python -m pip install blake3
+      - name: Compile affected Python files
+        run: python -m py_compile change_monitor.py api_extensions.py server.py tests/test_change_monitor.py
+      - name: Offline change observer unit tests
+        run: python -m unittest discover -s tests -p test_change_monitor.py -v
+      - name: Check dashboard token markers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('monitor_dashboard.html').read_text(encoding='utf-8')
+          assert 'const TOKEN=/*ENGINEER_TOKEN*/null;' in text
+          assert 'id="targets"' in text
+          assert 'id="algorithm"' in text
+          assert 'id="verify-algorithm"' in text
+          assert 'id="verify-file"' in text
+          main = Path('dashboard_v2.html').read_text(encoding='utf-8')
+          assert 'data-tab="monitor"' in main
+          assert 'id="tab-monitor"' in main
+          PY

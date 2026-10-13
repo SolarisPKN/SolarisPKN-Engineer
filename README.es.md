@@ -367,3 +367,33 @@ Resolución de módulos por lenguaje más precisa, lockfiles completos, caché i
 ---
 
 Este repositorio distribuye **solo Engineer** y ejemplos públicos saneados. Nunca publiques el árbol privado completo de Solaris ni sus datos de usuario. Licencia del repositorio: **GNU AGPL-3.0**.
+
+## Monitor de cambios — repositorios locales, webs públicas e ISOs
+
+**Nuevo módulo experimental:** Abrí **◉ Monitor SHA-256** en la interfaz de Engineer (admite MD5, SHA-256, SHA-512 y BLAKE3 opcional). Escribí la ruta absoluta de una carpeta (por ejemplo, un repositorio Git local), un archivo o una URL HTTP(S) pública. Elegí un intervalo (de 60 segundos a 24 horas), pulsá **Iniciar monitorización** y usá **Comprobar ahora** cuando necesites una revisión inmediata.
+
+- **Repositorios y archivos locales:** guarda una referencia inicial con los nombres relativos y huellas del algoritmo elegido; después identifica archivos agregados, eliminados y modificados. Ignora `.git` y varias carpetas de dependencias generadas. No ejecuta ni modifica archivos del proyecto. El análisis del grafo sigue funcionando por separado.
+- **Páginas públicas:** consulta la URL indicada, calcula la huella de la respuesta HTTP con el algoritmo elegido y compara adicionalmente el texto normalizado para diferenciar cambios de contenido visible y cambios técnicos. Puede utilizar ETag / Last-Modified para reducir transferencias. **No recorre automáticamente** todos los scripts, CSS, imágenes o API externas, y no renderiza contenido generado en JavaScript.
+- **Almacenamiento privado:** configura los objetivos y guarda huellas, extractos de texto, nombres de archivos e historial en `.private/change-monitor.sqlite`, excluido de Git. Evitá registrar URLs que tengan secretos en el parámetro de consulta; los datos permanecen en esta base local.
+- **Funcionamiento:** no realiza consultas externas hasta que el usuario agrega una URL. Las revisiones automáticas se realizan solo mientras Engineer esté funcionando. La primera revisión crea una referencia; sin cambios no se agregan eventos repetitivos.
+- **Protecciones:** comprueba IPs públicas, fija la IP resuelta para evitar cambios DNS durante la conexión, valida certificados HTTPS, bloquea destinos locales/privados y limita los tamaños de descarga. No sigue redirecciones HTTP automáticamente en esta versión. No envía credenciales guardadas, cookies ni código del repositorio.
+- **Límites:** 1 MiB por respuesta web, 8000 archivos por carpeta y cálculo de hashes hasta 32 MiB por archivo. Los archivos mayores se comparan **solo por tamaño y fecha de modificación**, no por hash criptográfico. Utiliza sondeos periódicos, no notificaciones nativas del sistema de archivos.
+
+Pruebas unitarias sin Internet:
+
+```sh
+python -m unittest discover -s tests -p 'test_change_monitor.py' -v
+```
+
+Detectar un cambio observado **no demuestra que exista una falla** ni permite ver cambios privados del backend sin acceso.
+
+### Algoritmos y verificación de archivos ISO
+
+Cada objetivo monitoreado puede usar **SHA-256 (predeterminado), SHA-512, MD5 (heredado) o BLAKE3**. Para modificar la frecuencia o el algoritmo, registrá nuevamente la misma ruta/URL con los nuevos valores. Al cambiar de algoritmo Engineer reinicia la referencia y registra la transición; así evita comparar huellas incompatibles. La base SQLite existente con SHA-256 se migra automáticamente sin borrar su historial.
+
+**BLAKE3 es opcional** para preservar el motor liviano (Python 3.10+ sin dependencias obligatorias). Si se ejecuta con Python, instalalo en el mismo entorno con `python -m pip install blake3`. Si se compila un EXE, debe estar instalado *antes de compilar* para incluirlo en el paquete. Sin el módulo, la interfaz deshabilita BLAKE3; no se reemplaza silenciosamente por otro algoritmo.
+
+**Comparación de ISO y archivos grandes:** desde el monitor elegí una ruta local, el algoritmo que publica el proveedor y el hash hexadecimal esperado. Pulsá **Calcular y comparar**. Engineer calcula la huella de todo el archivo en bloques de 1 MiB (límite 32 GiB), sin enviar contenido a Internet. Esta verificación manual no equivale a la monitorización periódica: en los snapshots automáticos los archivos mayores a 32 MiB se comparan solamente por metadatos. Un MD5 coincidente sirve para compatibilidad heredada, pero *no certifica autenticidad frente a un atacante*; verificá el hash publicado usando una fuente confiable.
+
+Los objetivos SHA-256 existentes conservan sus huellas previas mientras no cambies manualmente su algoritmo.
+

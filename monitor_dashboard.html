@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Engineer · Monitor de cambios y verificación</title>
+<style>
+:root{color-scheme:dark;--bg:#090e19;--panel:#142238;--line:#344a65;--text:#e5eefb;--muted:#a2b6d0;--accent:#73e3d3}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,Segoe UI,sans-serif}
+main{max-width:1420px;margin:auto;padding:19px;overflow:auto}h1{font-size:21px;margin:0 0 5px}h2{font-size:16px;margin:0 0 12px}
+p{margin:8px 0 14px;color:var(--muted)}.columns{display:grid;grid-template-columns:minmax(265px,330px) minmax(0,1fr);gap:14px;align-items:start}
+.card{border:1px solid var(--line);background:var(--panel);padding:16px;border-radius:11px;margin-bottom:14px}
+input,select,button{border:1px solid var(--line);border-radius:7px;background:#1e324b;color:var(--text);padding:10px;font:inherit}
+input,select{width:100%}button{cursor:pointer}button:hover{border-color:var(--accent)}button:disabled{opacity:.55;cursor:wait}
+button.primary{background:#225958;border-color:#379c96}button.danger{color:#ffc5c7}
+label{display:block;font-size:12px;color:var(--muted);margin:10px 0 5px;font-weight:600}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.push{margin-left:auto}
+#targets,#events{display:grid;gap:10px}.target,.event{border:1px solid #30435b;background:#0f1c2d;border-radius:8px;padding:12px}
+.name{font:12px/1.5 Consolas,monospace;overflow-wrap:anywhere;color:#dfebfb;margin:8px 0}
+.muted,small{color:var(--muted)}small{display:block;line-height:1.7;overflow-wrap:anywhere}.state{border-radius:5px;padding:3px 7px;font-size:11px;background:#354358}
+.state.content,.state.technical,.state.files{background:#685026;color:#ffe7af}
+.state.baseline{background:#215344;color:#bdeed8}.state.error{background:#652d39;color:#ffced4}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.5 Consolas,monospace;padding:10px;border-radius:6px;background:#0a1522;max-height:230px;overflow:auto}
+.notice{font-size:12px;line-height:1.6;background:#1a3047;padding:10px;border-radius:8px}
+#feedback,#verify-result{min-height:22px;color:var(--accent)}
+#verify-result pre{max-height:none}
+#verify-result.error{color:#ffb9be}
+code{color:#b4eedc}.empty{padding:20px 5px}
+@media(max-width:790px){main{padding:12px}.columns{grid-template-columns:1fr}}
+</style></head>
+<body><main>
+<h1>◉ Monitor de cambios · múltiples algoritmos</h1>
+<p>Para repositorios y carpetas locales o páginas web públicas, con MD5, SHA-256, SHA-512 y BLAKE3. Guarda el historial exclusivamente en <code>Engineer/.private/change-monitor.sqlite</code>. Las comprobaciones automáticas funcionan mientras Engineer esté ejecutándose.</p>
+<div class="columns">
+<section class="card">
+ <h2>Nuevo objetivo</h2>
+ <label for="target">URL pública o ruta de repositorio local</label>
+ <input id="target" spellcheck="false" placeholder="https://ejemplo.com/ o D:\GitHub\MiRepo">
+ <label for="algorithm">Algoritmo para este objetivo</label>
+ <select id="algorithm">
+  <option value="sha256" selected>SHA-256 · compatible y seguro (predeterminado)</option>
+  <option value="sha512">SHA-512 · mayor longitud de huella</option>
+  <option value="blake3">BLAKE3 · rápido (requiere módulo opcional)</option>
+  <option value="md5">MD5 · solo compatibilidad heredada</option>
+ </select>
+ <p id="algorithm-hint" style="font-size:12px">SHA-256 es el valor predeterminado recomendado.</p>
+ <label for="interval">Intervalo entre revisiones</label>
+ <select id="interval">
+  <option value="60">Cada minuto</option><option value="300" selected>Cada 5 minutos</option>
+  <option value="900">Cada 15 minutos</option><option value="3600">Cada hora</option>
+  <option value="21600">Cada 6 horas</option><option value="86400">Cada 24 horas</option>
+ </select>
+ <button id="add" class="primary" style="width:100%;margin-top:16px">+ Iniciar monitorización</button>
+ <p id="feedback" role="status" aria-live="polite"></p>
+ <div class="notice">La primera lectura crea una referencia. Si cambiás el algoritmo de un objetivo existente, Engineer restablece esa referencia para evitar comparaciones entre hashes incompatibles. MD5 es solo para interoperabilidad heredada: no ofrece protección fiable contra manipulaciones deliberadas. Las consultas web no siguen redirecciones ni ejecutan JavaScript.</div>
+ <p style="font-size:12px">Límites: 1 MB de respuesta web, 8000 archivos por carpeta y 32 MB por archivo (los mayores se revisan solo por metadatos). No descarga ni ejecuta software observado.</p>
+ <hr style="border:0;border-top:1px solid var(--line);margin:20px 0">
+ <h2>💿 Comprobar ISO o archivo descargado</h2>
+ <p>Compará un archivo local con la huella publicada por su proveedor, incluso si pesa varios GB. Se lee por bloques y no se sube.</p>
+ <label for="verify-file">Ruta completa al archivo</label>
+ <input id="verify-file" spellcheck="false" placeholder="D:\Descargas\Windows.iso">
+ <label for="verify-algorithm">Algoritmo publicado</label>
+ <select id="verify-algorithm">
+  <option value="sha256" selected>SHA-256</option>
+  <option value="sha512">SHA-512</option>
+  <option value="blake3">BLAKE3</option>
+  <option value="md5">MD5 (legado)</option>
+ </select>
+ <label for="verify-expected">Hash esperado, copiado del proveedor</label>
+ <input id="verify-expected" spellcheck="false" autocomplete="off" placeholder="Pegar cadena hexadecimal">
+ <button id="verify" style="width:100%;margin-top:12px">🔎 Calcular y comparar</button>
+ <div id="verify-result" role="status" aria-live="polite"></div>
+ <p class="muted" style="font-size:12px">Si el hash coincide, tenés igualdad respecto de ese valor. Para confirmar autenticidad, obtené el hash de una fuente confiable. MD5 es vulnerable a colisiones deliberadas.</p>
+</section>
+<section>
+ <div class="card"><div class="row"><h2>Objetivos monitorizados</h2><button class="push" id="refresh">↻ Actualizar</button></div>
+ <div id="targets"><p class="empty">Sin objetivos todavía.</p></div></div>
+ <div class="card"><h2>Historial de eventos</h2><p>Se registran referencias iniciales, cambios y errores. Los resultados sin cambios no saturan el historial.</p>
+ <div id="events"><p class="empty">Sin eventos todavía.</p></div></div>
+</section></div>
+</main>
+<script>
+"use strict";
+const TOKEN=/*ENGINEER_TOKEN*/null;
+const $=id=>document.getElementById(id);
+const labels={pending:"Pendiente",unchanged:"Sin cambios",baseline:"Referencia inicial",
+  content:"Contenido distinto",technical:"Cambio técnico",files:"Archivos modificados",
+  error:"Error",busy:"Ocupado"};
+async function api(path,data){
+ const options=data===undefined?{}:{method:"POST",headers:{"Content-Type":"application/json",
+    "X-Engineer-Token":TOKEN},body:JSON.stringify(data)};
+ const response=await fetch(path,options);
+ const json=await response.json();
+ if(!response.ok)throw Error(json.error||("HTTP "+response.status));
+ return json;
+}
+function element(name,text,className){
+ const node=document.createElement(name);
+ if(text!==undefined)node.textContent=String(text);
+ if(className)node.className=className;
+ return node;
+}
+function dateText(date){return date?new Date(date).toLocaleString():"Pendiente";}
+function info(msg){$("feedback").textContent=msg;}
+function makeTarget(t){
+ const card=element("div",undefined,"target");
+ const header=element("div",undefined,"row");
+ header.append(element("b",t.kind==="web"?"🌐 Web pública":"💾 Carpeta/archivo local"));
+ const state=element("span",labels[t.last_state]||"Pendiente","state "+(t.last_state||"pending"));
+ state.classList.add("push");header.append(state);card.append(header);
+ card.append(element("div",t.target,"name"));
+ const details=element("small");
+ details.textContent=(t.algorithm||"sha256").toUpperCase()+": "+(t.last_sha||"Aún sin referencia")+
+  "\nÚltima revisión: "+dateText(t.checked_at)+
+  "\nPróxima: "+dateText(t.next_check)+
+  "\nFrecuencia: "+t.interval_seconds+" segundos"+
+  (t.last_error?"\nError: "+t.last_error:"");
+ details.style.whiteSpace="pre-line";card.append(details);
+ const actions=element("div",undefined,"row");
+ actions.style.marginTop="10px";
+ const check=element("button","Comprobar ahora");
+ const remove=element("button","Quitar","danger");
+ check.onclick=async()=>{
+  check.disabled=true;info("Calculando huellas y comparando...");
+  try{const r=await api("/api/monitor/check",{id:t.id});
+   info(r.state==="unchanged"?"Sin cambios detectados":r.message||r.state);
+  }catch(error){info(error.message);}
+  finally{check.disabled=false;await refresh();}
+ };
+ remove.onclick=async()=>{
+  if(!confirm("¿Eliminar el objetivo y sus eventos históricos?"))return;
+  remove.disabled=true;
+  try{await api("/api/monitor/remove",{id:t.id});info("Objetivo eliminado.");}
+  catch(error){info(error.message);}
+  finally{remove.disabled=false;await refresh();}
+ };
+ actions.append(check,remove);card.append(actions);return card;
+}
+function makeEvent(e){
+ const card=element("div",undefined,"event");
+ const title=element("div");
+ title.append(element("b",e.summary));
+ card.append(title);
+ card.append(element("small",dateText(e.at)+" · "+e.type));
+ card.append(element("div",e.target,"name"));
+ try{const detail=JSON.parse(e.details);
+  if(detail&&Object.keys(detail).length)card.append(element("pre",JSON.stringify(detail,null,2)));
+ }catch(error){ /* Incomplete history details are ignored, never interpreted as HTML. */ }
+ return card;
+}
+let refreshing=false;
+async function refresh(){
+ if(refreshing)return;
+ refreshing=true;
+ try{
+  const [targets,events]=await Promise.all([api("/api/monitor/targets"),
+    api("/api/monitor/events?limit=50")]);
+  $("targets").replaceChildren(...(targets.targets.length
+   ?targets.targets.map(makeTarget):[element("p","No agregaste objetivos todavía.","empty")]));
+  $("events").replaceChildren(...(events.events.length
+   ?events.events.map(makeEvent):[element("p","No se registraron cambios todavía.","empty")]));
+ }catch(error){info("Error consultando el monitor: "+error.message);}
+ finally{refreshing=false;}
+}
+async function loadAlgorithms(){
+ try{
+  const state=await api("/api/monitor/algorithms");
+  for(const selectId of ["algorithm","verify-algorithm"]){
+   const element=$(selectId);
+   for(const option of element.options){
+    const capability=state.algorithms.find(a=>a.id===option.value);
+    option.disabled=!capability?.available;
+    if(option.value==="blake3"&&!capability?.available)
+     option.textContent="BLAKE3 · instalar con python -m pip install blake3";
+   }
+  }
+ }catch(e){info("No se pudieron consultar algoritmos disponibles: "+e.message);}
+}
+const algoHints={
+ sha256:"SHA-256: interoperabilidad y seguridad criptográfica; recomendado por defecto.",
+ sha512:"SHA-512: digest de 512 bits; compatibilidad con hashes SHA-512 publicados.",
+ blake3:"BLAKE3: alto rendimiento, requiere instalar el paquete opcional 'blake3'.",
+ md5:"⚠ MD5: modo heredado para cotejar sumas publicadas. No sirve para certificar autenticidad frente a ataques."
+};
+$("algorithm").onchange=()=>$("algorithm-hint").textContent=algoHints[$("algorithm").value];
+$("verify").onclick=async()=>{
+ const button=$("verify");
+ const output=$("verify-result");
+ button.disabled=true;output.className="";output.replaceChildren(element("p","Calculando hash del archivo completo…"));
+ try{
+  const result=await api("/api/monitor/verify",
+   {file:$("verify-file").value.trim(),algorithm:$("verify-algorithm").value,expected:$("verify-expected").value.trim()});
+  output.append(element("b",result.matches?"✅ COINCIDE con la huella esperada":"❌ NO COINCIDE: archivo distinto"));
+  output.append(element("pre","Archivo: "+result.file+"\nAlgoritmo: "+result.algorithm.toUpperCase()+
+   "\nTamaño: "+result.size+" bytes\nEsperado: "+result.expected+"\nCalculado: "+result.actual));
+  if(result.warning)output.append(element("p","⚠ "+result.warning));
+ }catch(e){output.className="error";output.replaceChildren(element("p",e.message));}
+ finally{button.disabled=false;}
+};
+$("add").onclick=async()=>{
+ const button=$("add");button.disabled=true;info("Registrando objetivo...");
+ try{
+  await api("/api/monitor/add",{target:$("target").value.trim(),
+    interval_seconds:Number($("interval").value),algorithm:$("algorithm").value});
+  info("Registrado. Se tomará una primera referencia automáticamente; también podés comprobarlo ahora.");
+  $("target").value="";
+  await refresh();
+ }catch(error){info(error.message);}
+ finally{button.disabled=false;}
+};
+$("refresh").onclick=refresh;
+loadAlgorithms();refresh();
+setInterval(()=>{if(!document.hidden)refresh();},15000);
+</script></body></html>
