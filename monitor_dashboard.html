@@ -24,6 +24,10 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.5 Consolas,monospace
 .diff-line.added{color:#b6efd2;background:#143629}.diff-line.deleted{color:#ffd2d5;background:#421b27}
 .diff-line.meta{color:#a5bddc}.commit-link{color:#91d7e8;overflow-wrap:anywhere}
 .event details{margin-top:9px}.event summary{cursor:pointer;color:#bee6ea}
+.github-provenance{border:1px solid #38506a;border-radius:8px;padding:10px;margin:8px 0;background:#101e30}
+.two-inputs{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.diff-file{margin:12px 0;border-top:1px solid #36506c;padding-top:10px}
+@media(max-width:550px){.two-inputs{grid-template-columns:1fr}}
 #feedback,#verify-result{min-height:22px;color:var(--accent)}
 #verify-result pre{max-height:none}
 #verify-result.error{color:#ffb9be}
@@ -46,6 +50,9 @@ code{color:#b4eedc}.empty{padding:20px 5px}
   <option value="md5">MD5 · solo compatibilidad heredada</option>
  </select>
  <p id="algorithm-hint" style="font-size:12px">SHA-256 es el valor predeterminado recomendado.</p>
+ <label for="github-linked">Repositorio GitHub del despliegue (opcional, solo para webs HTTPS)</label>
+ <input id="github-linked" spellcheck="false" placeholder="organización/repo">
+ <p class="muted" style="font-size:11px">Al configurarlo, Engineer consulta los deployments GitHub cuando detecta cambios web. Solo muestra candidatos respaldados por registros de éxito; no certifica el contenido servido.</p>
  <label style="display:flex;gap:9px;align-items:start;margin-top:14px">
   <input type="checkbox" id="record-diffs" style="width:auto;margin-top:3px">
   <span>Guardar extractos de texto privados para mostrar diffs (opcional)</span>
@@ -82,6 +89,27 @@ code{color:#b4eedc}.empty{padding:20px 5px}
 <section>
  <div class="card"><div class="row"><h2>Objetivos monitorizados</h2><button class="push" id="refresh">↻ Actualizar</button></div>
  <div id="targets"><p class="empty">Sin objetivos todavía.</p></div></div>
+ <div class="card">
+ <h2>Comparador de GitHub y blame por línea</h2>
+ <p>Consulta de solo lectura, sin clonar repositorios. Las comparaciones públicas funcionan sin token. Blame remoto necesita un token GitHub con acceso al código.</p>
+ <label for="remote-repo">Repositorio GitHub</label><input id="remote-repo" placeholder="SolarisPKN/SolarisPKN-Engineer" spellcheck="false">
+ <div class="two-inputs">
+ <div><label for="compare-base">Desde (SHA, rama o tag)</label><input id="compare-base" placeholder="main" value="main"></div>
+ <div><label for="compare-head">Hasta (SHA, rama o tag)</label><input id="compare-head" placeholder="feature"></div>
+ </div>
+ <button id="compare-run" class="primary" style="margin-top:12px">Comparar commits remotos</button>
+ <div id="compare-result" role="status" aria-live="polite"></div>
+ <hr style="border:0;border-top:1px solid var(--line);margin:20px 0">
+ <h2>Blame de GitHub por línea</h2>
+ <label for="blame-file">Archivo (ruta dentro del repo)</label>
+ <input id="blame-file" spellcheck="false" placeholder="src/main.py">
+ <div class="two-inputs">
+ <div><label for="blame-ref">Rama / commit</label><input id="blame-ref" value="main"></div>
+ <div><label>Rango de líneas</label><div class="two-inputs"><input id="blame-start" type="number" min="1" value="1"><input id="blame-end" type="number" min="1" value="40"></div></div>
+ </div>
+ <button id="blame-run" style="margin-top:12px">Consultar blame GitHub</button>
+ <div id="blame-result" role="status" aria-live="polite"></div>
+ </div>
  <div class="card"><h2>Historial de eventos</h2><p>Se registran referencias iniciales, cambios y errores. Los resultados sin cambios no saturan el historial.</p>
  <div id="events"><p class="empty">Sin eventos todavía.</p></div></div>
 </section></div>
@@ -121,6 +149,7 @@ function makeTarget(t){
   "\nÚltima revisión: "+dateText(t.checked_at)+
   "\nPróxima: "+dateText(t.next_check)+
   "\nFrecuencia: "+t.interval_seconds+" segundos"+
+  (t.github_repo?"\nGitHub deployment: "+t.github_repo:"")+
   "\nDifferences: "+(t.record_diffs?"diffs de texto habilitados":"solo hashes")+
   (t.last_error?"\nError: "+t.last_error:"");
  details.style.whiteSpace="pre-line";card.append(details);
@@ -128,6 +157,37 @@ function makeTarget(t){
  actions.style.marginTop="10px";
  const check=element("button","Comprobar ahora");
  const remove=element("button","Quitar","danger");
+ if(t.kind==="web"&&t.github_repo){
+  const deployments=element("button","Buscar despliegue");
+  deployments.onclick=async()=>{
+   deployments.disabled=true;
+   try{const data=await api("/api/monitor/deployments",{id:t.id});
+    const area=element("div",undefined,"github-provenance");
+    area.append(element("p",data.note));
+    for(const dep of data.matches||[]){
+     const a=element("a",dep.sha.slice(0,12)+" · "+dep.environment+" · "+dep.deployed_at,"commit-link");
+     a.href=dep.url;a.target="_blank";a.rel="noopener noreferrer";area.append(a);
+    }
+    card.append(area);
+   }catch(e){info(e.message);}
+   finally{deployments.disabled=false;}
+  };
+  actions.append(deployments);
+ }
+ if(t.kind==="local"){
+  const blame=element("button","Blame local");
+  blame.onclick=async()=>{
+   const relative=window.prompt("Archivo relativo al objetivo monitorizado:", "");
+   if(!relative)return;
+   blame.disabled=true;
+   try{
+    const result=await api("/api/monitor/blame",{id:t.id,file:relative.trim(),start:1,end:60});
+    card.append(renderLocalBlame(result));
+   }catch(error){info(error.message);}
+   finally{blame.disabled=false;}
+  };
+  actions.append(blame);
+ }
  check.onclick=async()=>{
   check.disabled=true;info("Calculando huellas y comparando...");
   try{const r=await api("/api/monitor/check",{id:t.id});
@@ -196,6 +256,17 @@ function makeEvent(e){
    }
    fold.append(element("p",detail.git.notice||"El autor del commit no prueba quién editó el archivo."));
   }else if(detail.git)fold.append(element("p",detail.git.reason||"Sin historial Git"));
+  if(detail.deployment){
+   const d=detail.deployment;
+   const section=element("div",undefined,"github-provenance");
+   section.append(element("b","Deployments registrados en GitHub (no prueban el HTML)"));
+   section.append(element("p",d.note||"No hay asociación verificable."));
+   for(const dep of d.matches||[]){
+    const a=element("a","Deployment "+dep.deployment_id+" · "+dep.sha.slice(0,12),"commit-link");
+    a.href=dep.url;a.target="_blank";a.rel="noopener noreferrer";section.append(a);
+   }
+   fold.append(section);
+  }
   if(detail.diff_note)fold.append(element("p",detail.diff_note));
   if(!(detail.diff||detail.diffs?.length||detail.git))
     fold.append(element("pre",JSON.stringify(detail,null,2)));
@@ -257,13 +328,89 @@ $("add").onclick=async()=>{
  try{
   await api("/api/monitor/add",{target:$("target").value.trim(),
     interval_seconds:Number($("interval").value),algorithm:$("algorithm").value,
-    record_diffs:$("record-diffs").checked});
+    record_diffs:$("record-diffs").checked, github_repo:$("github-linked").value.trim()});
   info("Registrado. Se tomará una primera referencia automáticamente; también podés comprobarlo ahora.");
   $("target").value="";
   await refresh();
  }catch(error){info(error.message);}
  finally{button.disabled=false;}
 };
+
+function safeCommitLink(parent, sha, href){
+ const a=element("a",String(sha).slice(0,12),"commit-link");
+ a.href=href;a.target="_blank";a.rel="noopener noreferrer";parent.append(a);
+}
+function renderLocalBlame(result){
+ const section=element("div",undefined,"github-provenance");
+ section.append(element("b","Git blame local — "+result.path));
+ section.append(element("p",result.note));
+ for(const line of result.lines||[]){
+  const entry=element("div",undefined,"diff-line");
+  entry.textContent=line.line+" · "+(line.uncommitted?"sin commit":line.author||"desconocido")+
+    " ["+String(line.sha||"local").slice(0,10)+"]  "+line.text;
+  section.append(entry);
+ }
+ return section;
+}
+function renderRemoteBlame(data){
+ const parent=element("div",undefined,"github-provenance");
+ parent.append(element("p",data.note));
+ if(!data.ranges?.length)parent.append(element("p","No se hallaron líneas atribuidas para el rango."));
+ for(const item of data.ranges||[]){
+  const group=element("div",undefined,"diff-file");
+  group.append(element("b","Líneas "+item.start+"–"+item.end));
+  group.append(element("small","Autor declarado: "+item.author+
+    (item.github_login?" (@"+item.github_login+")":"")+" · "+(item.date||"")+" · "+item.message));
+  safeCommitLink(group,item.sha,item.url);parent.append(group);
+ }
+ return parent;
+}
+$("compare-run").onclick=async()=>{
+ const btn=$("compare-run"),out=$("compare-result");btn.disabled=true;
+ out.replaceChildren(element("p","Comparando commits en GitHub…"));
+ try{
+  const result=await api("/api/github/compare",{
+   repository:$("remote-repo").value.trim(),base:$("compare-base").value.trim(),
+   head:$("compare-head").value.trim()});
+  const list=element("div",undefined,"github-provenance");
+  list.append(element("b",result.total_commits+" commits · "+result.files.length+
+                       " archivos mostrados"+(result.truncated?" (vista truncada)":"")));
+  list.append(element("p",result.note));
+  for(const commit of result.commits||[]){
+   const row=element("div",undefined,"diff-file");
+   row.append(element("small",commit.author+" · "+commit.date+" · "+commit.message));
+   safeCommitLink(row,commit.sha,commit.url);list.append(row);
+  }
+  for(const file of result.files||[]){
+   const fold=element("details",undefined,"diff-file");
+   fold.append(element("summary",file.path+" ("+file.status+
+     "; +"+file.additions+"/-"+file.deletions+")"));
+   if(file.patch_available)fold.append(renderPatch(file.patch));
+   else fold.append(element("p","GitHub no devolvió un patch de texto para este archivo."));
+   const blame=element("button","Blame en GitHub para este archivo");
+   blame.onclick=()=>{
+    $("blame-file").value=file.path;$("blame-ref").value=$("compare-head").value.trim();
+    $("blame-file").focus();
+   };
+   fold.append(blame);list.append(fold);
+  }
+  out.replaceChildren(list);
+ }catch(error){out.replaceChildren(element("p",error.message));}
+ finally{btn.disabled=false;}
+};
+$("blame-run").onclick=async()=>{
+ const btn=$("blame-run"),out=$("blame-result");btn.disabled=true;
+ out.replaceChildren(element("p","Consultando blame remoto…"));
+ try{
+  const result=await api("/api/github/blame",{
+   repository:$("remote-repo").value.trim(),ref:$("blame-ref").value.trim(),
+   file:$("blame-file").value.trim(),start:Number($("blame-start").value),
+   end:Number($("blame-end").value)});
+  out.replaceChildren(renderRemoteBlame(result));
+ }catch(error){out.replaceChildren(element("p",error.message));}
+ finally{btn.disabled=false;}
+};
+
 $("refresh").onclick=refresh;
 loadAlgorithms();refresh();
 setInterval(()=>{if(!document.hidden)refresh();},15000);
