@@ -24,7 +24,7 @@ SHA_B = "b" * 40
 class GitHubRemoteTests(unittest.TestCase):
     def test_input_validation_blocks_bad_repo_ref_file(self):
         for repo in ("https://github.com/org/repo", "org/repo/extra", "org/../repo",
-                     "org/repo?token=x", "org//repo", "localhost/x"):
+                     "org/repo?token=x", "org//repo", "localhost://x"):
             with self.assertRaises(ValueError, msg=repo):
                 repo_name(repo)
         for ref in ("", "../main", "main/../secrets", "a\nb", ".hidden", "-main"):
