@@ -38,7 +38,7 @@ def ref_name(value: str) -> str:
 
 def file_name(value: str) -> str:
     if (not isinstance(value, str) or not 1 <= len(value) <= 400 or "\\" in value or
-            value.startswith(("/", ".")) or
+            value.startswith("/") or
             any(x in (".", "..", "") for x in value.split("/")) or
             any(ord(ch) < 32 for ch in value)):
         raise ValueError("Ruta del archivo inválida o fuera del repositorio")
