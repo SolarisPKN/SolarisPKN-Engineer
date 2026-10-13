@@ -8,7 +8,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from change_monitor import ChangeMonitor, digest, local_manifest, target_kind, visible_content
+from change_monitor import (ChangeMonitor, digest, local_manifest, target_kind,
+                            visible_content, algorithm_status, verify_local_file, new_hasher)
 
 
 class ChangeMonitorTests(unittest.TestCase):
@@ -122,6 +123,124 @@ class ChangeMonitorTests(unittest.TestCase):
         with patch("change_monitor.socket.getaddrinfo",
                    return_value=[(2, 1, 6, "", ("8.8.8.8", 443))]):
             self.assertEqual(public_ip_for("example.org", 443), "8.8.8.8")
+
+    def test_all_hashes_and_lengths(self):
+        sample = b"abc"
+        self.assertEqual(digest(sample, "md5"), "900150983cd24fb0d6963f7d28e17f72")
+        self.assertEqual(digest(sample, "sha256"),
+                         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+        self.assertEqual(len(digest(sample, "sha512")), 128)
+        self.assertNotEqual(digest(sample, "sha512"), digest(sample, "sha256"))
+        self.assertEqual(len(digest(sample, "md5")), 32)
+        with self.assertRaises(ValueError):
+            new_hasher("sha1")
+        with self.assertRaises(ValueError):
+            new_hasher("not-an-algorithm")
+
+    def test_blake3_optional_dependency_is_not_replaced(self):
+        with patch.dict("sys.modules", {"blake3": None}):
+            with self.assertRaisesRegex(ValueError, "BLAKE3"):
+                digest(b"abc", "blake3")
+        available = {entry["id"]: entry["available"] for entry in algorithm_status()["algorithms"]}
+        if available["blake3"]:
+            self.assertEqual(
+                digest(b"", "blake3"),
+                "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262",
+            )
+
+    def test_change_algorithm_creates_new_baseline(self):
+        target = self.monitor.add("https://example.org/", 60, "sha256")
+        response = {"status": 200, "body": b"<h1>Hello!</h1>", "type": "text/html",
+                    "etag": "", "modified": ""}
+        with patch("change_monitor.fetch_public", return_value=response):
+            self.assertEqual(self.monitor.check(target["id"])["state"], "baseline")
+        previous = self.monitor.targets()[0]["last_sha"]
+        self.assertEqual(len(previous), 64)
+        updated = self.monitor.add("https://example.org/", 900, "md5")
+        self.assertEqual(updated["id"], target["id"])
+        self.assertEqual(updated["algorithm"], "md5")
+        self.assertIsNone(updated["last_sha"])
+        with patch("change_monitor.fetch_public", return_value=response):
+            result = self.monitor.check(target["id"])
+        self.assertEqual(result["state"], "baseline")
+        self.assertEqual(result["algorithm"], "md5")
+        self.assertEqual(self.monitor.targets()[0]["last_sha"], digest(response["body"], "md5"))
+        self.assertEqual(len(self.monitor.targets()[0]["last_sha"]), 32)
+        event_types = [e["type"] for e in self.monitor.events()]
+        self.assertEqual(event_types, ["baseline", "algorithm", "baseline"])
+        with patch("change_monitor.fetch_public", return_value=response):
+            self.assertEqual(self.monitor.check(target["id"])["state"], "unchanged")
+
+    def test_algorithm_switch_for_local_repository(self):
+        repo = self.root / "repo"
+        repo.mkdir()
+        (repo / "README.md").write_bytes(b"hello")
+        t = self.monitor.add(str(repo), 60, "md5")
+        self.assertEqual(self.monitor.check(t["id"])["state"], "baseline")
+        with sqlite3.connect(self.monitor.path) as db:
+            before = db.execute("SELECT last_manifest FROM targets WHERE id=?", (t["id"],)).fetchone()[0]
+        self.assertIn("md5:", before)
+        self.monitor.add(str(repo), 60, "sha512")
+        self.assertEqual(self.monitor.check(t["id"])["state"], "baseline")
+        with sqlite3.connect(self.monitor.path) as db:
+            after = db.execute("SELECT last_manifest FROM targets WHERE id=?", (t["id"],)).fetchone()[0]
+        self.assertIn("sha512:", after)
+        self.assertNotEqual(before, after)
+
+    def test_migrates_old_sha256_target_database(self):
+        database = self.root / "legacy.sqlite"
+        with sqlite3.connect(database) as db:
+            db.executescript("""
+                CREATE TABLE targets(
+                  id INTEGER PRIMARY KEY, target TEXT UNIQUE NOT NULL, kind TEXT NOT NULL,
+                  interval_seconds INTEGER NOT NULL, last_sha TEXT, last_semantic TEXT,
+                  last_sample TEXT, last_manifest TEXT, etag TEXT, modified TEXT,
+                  checked_at TEXT, next_check TEXT, last_state TEXT, last_error TEXT);
+                INSERT INTO targets(target,kind,interval_seconds,last_sha)
+                   VALUES('https://example.org/','web',300,'abc123');
+            """)
+        migrated = ChangeMonitor(database)
+        self.assertEqual(migrated.targets()[0]["algorithm"], "sha256")
+        self.assertEqual(migrated.targets()[0]["last_sha"], "abc123")
+        self.assertEqual(migrated.add("https://example.org/", 300)["last_sha"], "abc123")
+
+    def test_iso_checksum_verification_reads_entire_file(self):
+        iso = self.root / "Windows_test.iso"
+        iso.write_bytes((b"sample-iso-bytes" * 4000))
+        for algorithm in ("md5", "sha256", "sha512"):
+            reference = digest(iso.read_bytes(), algorithm)
+            result = verify_local_file(str(iso), reference.upper(), algorithm)
+            self.assertTrue(result["matches"])
+            self.assertEqual(result["actual"], reference)
+            self.assertEqual(result["algorithm"], algorithm)
+            self.assertEqual(result["size"], iso.stat().st_size)
+            false_ref = "0" * len(reference)
+            self.assertFalse(verify_local_file(str(iso), false_ref, algorithm)["matches"])
+        # A monitor uses metadata-only markers for large files; explicit verification hashes all bytes.
+        with patch("change_monitor.MAX_LOCAL_FILE", 32):
+            _, manifest = local_manifest(str(iso), "md5")
+            self.assertTrue(manifest[iso.name].startswith("metadata-only:"))
+            self.assertTrue(verify_local_file(str(iso), digest(iso.read_bytes(), "md5"), "md5")["matches"])
+        with self.assertRaises(ValueError):
+            verify_local_file(str(iso), "not-hex", "md5")
+        with self.assertRaises(ValueError):
+            verify_local_file(str(self.root), "0" * 32, "md5")
+        with self.assertRaises(ValueError):
+            verify_local_file("https://example.org/", "0" * 32, "md5")
+
+    def test_existing_sha512_web_record(self):
+        target = self.monitor.add("https://example.org/data", 60, "sha512")
+        responses = [
+            {"status": 200, "body": b'{"x":1}', "type": "application/json",
+             "etag": "v1", "modified": ""},
+            {"status": 200, "body": b'{"x":2}', "type": "application/json",
+             "etag": "v2", "modified": ""},
+        ]
+        with patch("change_monitor.fetch_public", side_effect=responses):
+            self.assertEqual(self.monitor.check(target["id"])["state"], "baseline")
+            result = self.monitor.check(target["id"])
+            self.assertEqual(result["state"], "content")
+        self.assertEqual(len(self.monitor.targets()[0]["last_sha"]), 128)
 
     def test_html_normalization(self):
         a = b"<html><style>body{color:red}</style><body> Hello   world </body></html>"
