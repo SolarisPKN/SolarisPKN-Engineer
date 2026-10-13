@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -74,7 +75,7 @@ class ChangeMonitorTests(unittest.TestCase):
                    return_value={"status": 200, "body": token.encode(),
                                  "type": "text/plain", "etag": "", "modified": ""}):
             self.assertEqual(self.monitor.check(target["id"])["state"], "baseline")
-        with sqlite3.connect(self.monitor.path) as db:
+        with closing(sqlite3.connect(self.monitor.path)) as db:
             row = db.execute("SELECT last_sha,last_sample FROM targets WHERE id=?", (target["id"],)).fetchone()
             self.assertEqual(row[0], hashlib.sha256(token.encode()).hexdigest())
             # Text samples are stored locally for change diagnosis: not in the public Git repo.
@@ -177,19 +178,19 @@ class ChangeMonitorTests(unittest.TestCase):
         (repo / "README.md").write_bytes(b"hello")
         t = self.monitor.add(str(repo), 60, "md5")
         self.assertEqual(self.monitor.check(t["id"])["state"], "baseline")
-        with sqlite3.connect(self.monitor.path) as db:
+        with closing(sqlite3.connect(self.monitor.path)) as db:
             before = db.execute("SELECT last_manifest FROM targets WHERE id=?", (t["id"],)).fetchone()[0]
         self.assertIn("md5:", before)
         self.monitor.add(str(repo), 60, "sha512")
         self.assertEqual(self.monitor.check(t["id"])["state"], "baseline")
-        with sqlite3.connect(self.monitor.path) as db:
+        with closing(sqlite3.connect(self.monitor.path)) as db:
             after = db.execute("SELECT last_manifest FROM targets WHERE id=?", (t["id"],)).fetchone()[0]
         self.assertIn("sha512:", after)
         self.assertNotEqual(before, after)
 
     def test_migrates_old_sha256_target_database(self):
         database = self.root / "legacy.sqlite"
-        with sqlite3.connect(database) as db:
+        with closing(sqlite3.connect(database)) as db:
             db.executescript("""
                 CREATE TABLE targets(
                   id INTEGER PRIMARY KEY, target TEXT UNIQUE NOT NULL, kind TEXT NOT NULL,
