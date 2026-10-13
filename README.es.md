@@ -367,3 +367,22 @@ Resolución de módulos por lenguaje más precisa, lockfiles completos, caché i
 ---
 
 Este repositorio distribuye **solo Engineer** y ejemplos públicos saneados. Nunca publiques el árbol privado completo de Solaris ni sus datos de usuario. Licencia del repositorio: **GNU AGPL-3.0**.
+
+## Monitor de cambios SHA-256 — repositorios locales y webs públicas
+
+**Nuevo módulo experimental:** Abrí **◉ Monitor SHA-256** en la interfaz de Engineer. Escribí la ruta absoluta de una carpeta (por ejemplo, un repositorio Git local), un archivo o una URL HTTP(S) pública. Elegí un intervalo (de 60 segundos a 24 horas), pulsá **Iniciar monitorización** y usá **Comprobar ahora** cuando necesites una revisión inmediata.
+
+- **Repositorios y archivos locales:** guarda una referencia inicial con los nombres relativos y huellas SHA-256; después identifica archivos agregados, eliminados y modificados. Ignora `.git` y varias carpetas de dependencias generadas. No ejecuta ni modifica archivos del proyecto. El análisis del grafo sigue funcionando por separado.
+- **Páginas públicas:** consulta la URL indicada, calcula SHA-256 de la respuesta HTTP y compara adicionalmente el texto normalizado para diferenciar cambios de contenido visible y cambios técnicos. Puede utilizar ETag / Last-Modified para reducir transferencias. **No recorre automáticamente** todos los scripts, CSS, imágenes o API externas, y no renderiza contenido generado en JavaScript.
+- **Almacenamiento privado:** configura los objetivos y guarda huellas, extractos de texto, nombres de archivos e historial en `.private/change-monitor.sqlite`, excluido de Git. Evitá registrar URLs que tengan secretos en el parámetro de consulta; los datos permanecen en esta base local.
+- **Funcionamiento:** no realiza consultas externas hasta que el usuario agrega una URL. Las revisiones automáticas se realizan solo mientras Engineer esté funcionando. La primera revisión crea una referencia; sin cambios no se agregan eventos repetitivos.
+- **Protecciones:** comprueba IPs públicas, fija la IP resuelta para evitar cambios DNS durante la conexión, valida certificados HTTPS, bloquea destinos locales/privados y limita los tamaños de descarga. No sigue redirecciones HTTP automáticamente en esta versión. No envía credenciales guardadas, cookies ni código del repositorio.
+- **Límites:** 1 MiB por respuesta web, 8000 archivos por carpeta y cálculo SHA-256 hasta 32 MiB por archivo. Los archivos mayores se comparan **solo por tamaño y fecha de modificación**, no por hash criptográfico. Utiliza sondeos periódicos, no notificaciones nativas del sistema de archivos.
+
+Pruebas unitarias sin Internet:
+
+```sh
+python -m unittest discover -s tests -p 'test_change_monitor.py' -v
+```
+
+Detectar un cambio observado **no demuestra que exista una falla** ni permite ver cambios privados del backend sin acceso.
