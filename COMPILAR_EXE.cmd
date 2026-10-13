@@ -8,7 +8,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-py -3 -m PyInstaller --noconfirm --clean --onefile --noconsole --name "SolarisPKN-Engineer" --distpath "." --workpath ".build" --specpath ".build" --add-data "dashboard_v2.html;." --add-data "visualizer.html;." "tray_launcher.py"
+py -3 -m PyInstaller --noconfirm --clean --onefile --noconsole --name "SolarisPKN-Engineer" --distpath "." --workpath ".build" --specpath ".build" --add-data "dashboard_v2.html;." --add-data "monitor_dashboard.html;." --add-data "visualizer.html;." "tray_launcher.py"
 if errorlevel 1 (
   echo Error al compilar. Revisar registro de PyInstaller.
   pause
