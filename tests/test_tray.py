@@ -29,6 +29,32 @@ class TrayTests(unittest.TestCase):
         self.assertIn("server.py", " ".join(command))
         self.assertIn("--no-browser", command)
 
+    @unittest.skipUnless(os.name == "nt", "Win32 tray structure requires Windows")
+    def test_win32_cursor_handle_and_tray_selftest(self):
+        import ctypes
+        from ctypes import wintypes
+        # WNDCLASSW.hCursor is a HANDLE even if ctypes.wintypes lacks HCURSOR.
+        _, window_class, notify_data = tray_launcher.windows_types()
+        field_types = dict(window_class._fields_)
+        self.assertIs(field_types["hCursor"], wintypes.HANDLE)
+        self.assertEqual(ctypes.sizeof(field_types["hCursor"]), ctypes.sizeof(ctypes.c_void_p))
+        self.assertGreaterEqual(ctypes.sizeof(notify_data), 700)
+        tray_launcher.tray_selftest()
+
+    def test_restart_confirmation_constructs_text_without_type_error(self):
+        tray = tray_launcher.WindowsTray()
+        class InlineThread:
+            def __init__(self, target, **kwargs):
+                self.target = target
+            def start(self):
+                self.target()
+        with (patch.object(tray_launcher.threading, "Thread", InlineThread),
+              patch.object(tray.supervisor, "status", return_value={"running": True, "busy": True}),
+              patch.object(tray.supervisor, "stop", return_value=False),
+              patch.object(tray_launcher, "win_dialog", return_value=tray_launcher.IDYES) as dialog):
+            tray.action(tray_launcher.MENU_RESTART)
+            self.assertIn("reiniciar Engineer?", dialog.call_args.args[0])
+
     def test_stop_request_prevents_new_jobs(self):
         state = State()
         state.stop_event.set()
