@@ -89,6 +89,9 @@ class HistoryTests(unittest.TestCase):
             return subprocess.run(["git", "-C", str(root), *args],
                                   check=True, capture_output=True, text=True)
         git("init")
+        # Prevent runner-specific core.autocrlf from making a fresh Git commit look dirty.
+        git("config", "core.autocrlf", "false")
+        git("config", "core.safecrlf", "false")
         git("config", "user.name", "Test Contributor")
         git("config", "user.email", "test@example.org")
         git("remote", "add", "origin", "https://github.com/SolarisPKN/SolarisPKN-Engineer.git")
