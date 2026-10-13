@@ -18,9 +18,14 @@ from scope import scope
 from live_view import status_snapshot
 from language_catalog import status as format_status, refresh_linguist
 from impact_analysis import impact_from_sqlite
+from change_monitor import get_monitor
 
 
 def get_extension(path, query: dict):
+    if path == "/api/monitor/targets":
+        return {"targets": get_monitor().targets()}
+    if path == "/api/monitor/events":
+        return {"events": get_monitor().events(int(query.get("limit", ["50"])[0]))}
     if path == "/api/integrations":
         return {"providers": catalog(), "github": {"configured": __import__("os").environ.get("GITHUB_TOKEN") is not None}}
     if path == "/api/hardware":
@@ -88,6 +93,12 @@ def get_extension(path, query: dict):
 
 
 def post_extension(path, data: dict):
+    if path == "/api/monitor/add":
+        return {"target": get_monitor().add(data.get("target", ""), data.get("interval_seconds", 300))}
+    if path == "/api/monitor/check":
+        return get_monitor().check(int(data.get("id", 0)))
+    if path == "/api/monitor/remove":
+        return get_monitor().remove(int(data.get("id", 0)))
     if path == "/api/formats/update":
         if data.get("consent") is not True:
             raise ValueError("Explicit consent required for external catalog update")
