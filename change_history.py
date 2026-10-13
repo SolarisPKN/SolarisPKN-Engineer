@@ -22,7 +22,7 @@ EXCLUDED_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".env", ".sqlite", ".db", "
 
 def safe_source(relative: str) -> bool:
     path = Path(relative)
-    if any(part.startswith(".env") or part.lower() in EXCLUDED_NAMES for part in path.parts):
+    if any(part.lower().startswith(".env") or part.lower() in EXCLUDED_NAMES for part in path.parts):
         return False
     if path.suffix.lower() in EXCLUDED_SUFFIXES:
         return False
@@ -155,12 +155,15 @@ def git_file_history(target: str, paths: list[str], *, limit: int = 12) -> dict:
             continue
         if safe.startswith("../") or safe == ".":
             continue
-        dirty = _git(cwd, "status", "--porcelain=1", "--untracked-files=normal", "--", safe)
+        spec = ":(top,literal)" + safe
+        dirty = _git(cwd, "status", "--porcelain=1", "--untracked-files=normal", "--", spec)
         commit_text = _git(cwd, "log", "-1",
                            "--format=%H%x1f%an%x1f%ae%x1f%aI%x1f%cn%x1f%cI%x1f%s",
-                           "--", safe)
+                           "--", spec)
         item = {"path": rel, "working_tree_changed": bool(dirty),
-                "attribution": "uncommitted" if dirty else "last_commit" if commit_text else "unavailable"}
+                "attribution": ("unavailable" if dirty is None else
+                                "uncommitted" if dirty else
+                                "last_commit" if commit_text else "unavailable")}
         if commit_text:
             parts = commit_text.split("\x1f", 6)
             if len(parts) == 7 and re.fullmatch(r"[0-9a-f]{40,64}", parts[0]):
