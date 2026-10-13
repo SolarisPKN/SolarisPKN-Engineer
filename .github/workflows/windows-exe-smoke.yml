@@ -6,6 +6,8 @@ on:
       - .github/workflows/windows-exe-smoke.yml
       - .gitignore
       - change_monitor.py
+      - tray_launcher.py
+      - tests/test_tray.py
   push:
     branches:
       - fix/python-312-isolated-exe-build-20261013
@@ -40,3 +42,18 @@ jobs:
           if (!(Test-Path "SolarisPKN-Engineer.exe")) { throw "Missing generated EXE" }
           if (!(Test-Path ".venv-engineer-build/Lib/site-packages/blake3")) { throw "Missing BLAKE3 in build environment" }
           Write-Host "Compiled EXE size:" (Get-Item "SolarisPKN-Engineer.exe").Length
+
+      - name: Smoke-test actual packaged tray Win32 ctypes ABI
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path ".\\SolarisPKN-Engineer.exe").Path
+          $process = Start-Process -FilePath $exe -ArgumentList "--tray-selftest" -PassThru
+          if (-not $process.WaitForExit(45000)) {
+            $process.Kill()
+            throw "Frozen EXE Win32 ctypes tray self-test timed out"
+          }
+          if ($process.ExitCode -ne 0) {
+            throw "Frozen EXE Win32 ctypes tray self-test failed with exit code $($process.ExitCode)"
+          }
+          Write-Host "Frozen Win32 tray ctypes self-test passed."
+

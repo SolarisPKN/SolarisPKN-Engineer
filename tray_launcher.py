@@ -241,12 +241,14 @@ def windows_types():
         ctypes.c_size_t, ctypes.c_ssize_t
     )
 
+    # HCURSOR is a pointer-sized Win32 HANDLE, but ctypes.wintypes omitted
+    # that alias in some supported Python builds. Use HANDLE directly.
     class WNDCLASSW(ctypes.Structure):
         _fields_ = [
             ("style", wintypes.UINT), ("lpfnWndProc", Callback),
             ("cbClsExtra", ctypes.c_int), ("cbWndExtra", ctypes.c_int),
             ("hInstance", wintypes.HINSTANCE), ("hIcon", wintypes.HICON),
-            ("hCursor", wintypes.HCURSOR), ("hbrBackground", wintypes.HBRUSH),
+            ("hCursor", wintypes.HANDLE), ("hbrBackground", wintypes.HBRUSH),
             ("lpszMenuName", wintypes.LPCWSTR), ("lpszClassName", wintypes.LPCWSTR),
         ]
 
@@ -402,7 +404,7 @@ class WindowsTray:
                     ans = win_dialog(
                         "Hay un análisis en curso.\n\n"
                         "¿Solicitar su parada y guardar el progreso antes de "
-                        ("reiniciar" if command == MENU_RESTART else "cerrar") + " Engineer?",
+                        + ("reiniciar" if command == MENU_RESTART else "cerrar") + " Engineer?",
                         style=MB_YESNO | MB_ICONQUESTION, hwnd=self.hwnd,
                     )
                     if ans != IDYES:
@@ -491,8 +493,26 @@ class WindowsTray:
                 kernel.CloseHandle(self.mutex)
 
 
+def tray_selftest():
+    """Headless Win32 FFI smoke-test for the packaged, windowless EXE.
+
+    Deliberately avoids creating a window, tray icon or server process.
+    """
+    if os.name != "nt":
+        raise RuntimeError("La autoprueba del tray solo está disponible en Windows")
+    _, wnd_class, notify_data = windows_types()
+    fields = dict(wnd_class._fields_)
+    assert fields["hCursor"] is wintypes.HANDLE
+    assert ctypes.sizeof(wnd_class) > ctypes.sizeof(wintypes.HANDLE) * 6
+    assert ctypes.sizeof(notify_data) >= 700
+    WindowsTray()._api()  # Resolve all required Win32 symbols and handle types.
+
+
 def main():
     multiprocessing.freeze_support()
+    if "--tray-selftest" in sys.argv[1:]:
+        tray_selftest()
+        return
     if "--server-child" in sys.argv[1:]:
         sys.argv = ["engineer-server", "--no-browser"]
         from server import main as serve
