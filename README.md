@@ -397,3 +397,10 @@ Each watched target can use **SHA-256 (default), SHA-512, MD5 (legacy) or BLAKE3
 
 No stored hashes from the legacy SHA-256 mode are discarded unless their owner explicitly switches that target to another algorithm.
 
+### Opt-in text diffs and local Git commit provenance
+
+Select **Save private text excerpts for diffs** when registering a monitor target. This option is **off by default** to protect private source code. Bounded excerpts are persisted only to `.private/change-monitor.sqlite` and the event history can show added/removed lines. Typical secret file names/extensions, binaries and private folders are excluded; limits are 60 files of at most 8 KiB each and 160 KiB per snapshot. Files beyond the limits retain fingerprints and filenames only.
+
+For local Git working trees, Engineer reports the **last Git commit recorded for the changed file**, its declared author, date and message, and a GitHub commit link only if the configured `origin` is actually `github.com`. For dirty/untracked files it reports **uncommitted: editor unknown**, not the previous committer as the current editor. Git author fields are self-declared and do not prove personal identity. This feature uses local read-only Git commands and does not execute a GitHub API request or support remote GitHub blame yet.
+
+For public websites, the diff covers observed HTTP text, not server internals, client-rendered JavaScript or a verifiable publisher identity. An earlier captured snapshot is needed to compute a full diff; some large files can only have hash-level differences.
