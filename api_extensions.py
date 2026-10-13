@@ -18,10 +18,12 @@ from scope import scope
 from live_view import status_snapshot
 from language_catalog import status as format_status, refresh_linguist
 from impact_analysis import impact_from_sqlite
-from change_monitor import get_monitor
+from change_monitor import get_monitor, algorithm_status, verify_local_file
 
 
 def get_extension(path, query: dict):
+    if path == "/api/monitor/algorithms":
+        return algorithm_status()
     if path == "/api/monitor/targets":
         return {"targets": get_monitor().targets()}
     if path == "/api/monitor/events":
@@ -94,7 +96,11 @@ def get_extension(path, query: dict):
 
 def post_extension(path, data: dict):
     if path == "/api/monitor/add":
-        return {"target": get_monitor().add(data.get("target", ""), data.get("interval_seconds", 300))}
+        return {"target": get_monitor().add(data.get("target", ""),
+                    data.get("interval_seconds", 300), data.get("algorithm", "sha256"))}
+    if path == "/api/monitor/verify":
+        return verify_local_file(data.get("file", ""), data.get("expected", ""),
+                                 data.get("algorithm", "sha256"))
     if path == "/api/monitor/check":
         return get_monitor().check(int(data.get("id", 0)))
     if path == "/api/monitor/remove":
