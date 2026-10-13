@@ -6,11 +6,13 @@ on:
   pull_request:
     paths:
       - change_monitor.py
+      - change_history.py
       - api_extensions.py
       - server.py
       - monitor_dashboard.html
       - dashboard_v2.html
       - tests/test_change_monitor.py
+      - tests/test_change_history.py
       - .github/workflows/change-observer-tests.yml
   workflow_dispatch:
 
@@ -32,9 +34,9 @@ jobs:
       - name: Install optional BLAKE3 for test matrix
         run: python -m pip install blake3
       - name: Compile affected Python files
-        run: python -m py_compile change_monitor.py api_extensions.py server.py tests/test_change_monitor.py
+        run: python -m py_compile change_monitor.py change_history.py api_extensions.py server.py tests/test_change_monitor.py tests/test_change_history.py
       - name: Offline change observer unit tests
-        run: python -m unittest discover -s tests -p test_change_monitor.py -v
+        run: python -m unittest discover -s tests -p 'test_change_*.py' -v
       - name: Check dashboard token markers
         run: |
           python - <<'PY'
