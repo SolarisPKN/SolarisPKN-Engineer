@@ -1,0 +1,42 @@
+name: Windows EXE build smoke test
+on:
+  pull_request:
+    paths:
+      - COMPILAR_EXE.cmd
+      - .github/workflows/windows-exe-smoke.yml
+      - .gitignore
+      - change_monitor.py
+  push:
+    branches:
+      - fix/python-312-isolated-exe-build-20261013
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check Python 3.12 launcher
+        shell: pwsh
+        run: |
+          py -0p
+          py -3.12 -c "import sys,venv; print(sys.executable, sys.prefix)"
+      - name: Build with the same Windows command file as end users
+        shell: cmd
+        env:
+          CI: 'true'
+        run: call COMPILAR_EXE.cmd
+      - name: Validate isolated environment and output
+        shell: pwsh
+        run: |
+          if (!(Test-Path ".venv-engineer-build/Scripts/python.exe")) { throw "Missing isolated Python environment" }
+          if (!(Test-Path "SolarisPKN-Engineer.exe")) { throw "Missing generated EXE" }
+          if (!(Test-Path ".venv-engineer-build/Lib/site-packages/blake3")) { throw "Missing BLAKE3 in build environment" }
+          Write-Host "Compiled EXE size:" (Get-Item "SolarisPKN-Engineer.exe").Length
