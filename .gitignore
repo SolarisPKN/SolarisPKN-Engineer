@@ -4,6 +4,7 @@
 /proyectos/
 /.private/
 /.build/
+/.venv-engineer-build/
 /build/
 /dist/
 *.spec
