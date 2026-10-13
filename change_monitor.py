@@ -1,6 +1,6 @@
 """Opt-in public-web and local-file change observer for SolarisPKN-Engineer.
 
-Stdlib only. Read-only observations; never executes watched content.
+Stdlib-first, with optional BLAKE3 support. Read-only; never executes watched content.
 External fetches are restricted to global public IPs and pinned sockets (SSRF defense).
 All observations stay in Engineer/.private/, which is ignored by Git.
 """
@@ -26,6 +26,8 @@ from workspace import app_folder
 MAX_RESPONSE = 1_000_000
 MAX_LOCAL_FILE = 32 * 1024 * 1024
 MAX_FILES = 8000
+MAX_VERIFY_FILE = 32 * 1024 * 1024 * 1024  # 32 GiB, explicitly requested one-off verification only
+ALGORITHMS = {"sha256": 64, "sha512": 128, "blake3": 64, "md5": 32}
 MIN_INTERVAL = 60
 EXCLUDED_DIRS = {".git", ".private", "__pycache__", "node_modules", ".venv"}
 
@@ -34,8 +36,78 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def digest(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+def new_hasher(algorithm: str = "sha256"):
+    """Instantiate the selected algorithm; never silently substitute another hash."""
+    if not isinstance(algorithm, str) or algorithm not in ALGORITHMS:
+        raise ValueError("Algoritmo no admitido: elegí SHA-256, SHA-512, BLAKE3 o MD5")
+    if algorithm == "blake3":
+        try:
+            from blake3 import blake3
+        except ImportError as exc:
+            raise ValueError("BLAKE3 no está instalado: ejecutá 'python -m pip install blake3'") from exc
+        return blake3()
+    if algorithm == "md5":
+        # MD5 is for interoperability, not a security/integrity trust decision.
+        try:
+            return hashlib.md5(usedforsecurity=False)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("MD5 no está disponible en este entorno") from exc
+    return hashlib.new(algorithm)
+
+
+def digest(data: bytes, algorithm: str = "sha256") -> str:
+    hasher = new_hasher(algorithm)
+    hasher.update(data)
+    return hasher.hexdigest()
+
+
+def digest_file(path: Path, algorithm: str = "sha256") -> str:
+    """Stream the entire file without buffering it in memory."""
+    hasher = new_hasher(algorithm)
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def algorithm_status() -> dict:
+    try:
+        new_hasher("blake3")
+        blake3_ok = True
+    except ValueError:
+        blake3_ok = False
+    return {"algorithms": [
+        {"id": name, "available": name != "blake3" or blake3_ok,
+         "digest_length": hex_digits,
+         "legacy": name == "md5"}
+        for name, hex_digits in ALGORITHMS.items()
+    ]}
+
+
+def verify_local_file(path: str, expected: str, algorithm: str = "sha256") -> dict:
+    """Explicit, one-off whole-file checksum verification, including large ISO images.
+
+    No file content is stored or uploaded; expected digests must be from a trusted source.
+    """
+    kind, filename = target_kind(path)
+    if kind != "local":
+        raise ValueError("La verificación de descarga requiere un archivo local")
+    selected = Path(filename)
+    if not selected.is_file():
+        raise ValueError("Elegí un archivo, no una carpeta")
+    new_hasher(algorithm)
+    if not isinstance(expected, str) or not re.fullmatch(
+            r"[0-9a-fA-F]{" + str(ALGORITHMS[algorithm]) + r"}", expected.strip()):
+        raise ValueError("La huella esperada debe tener " +
+                         str(ALGORITHMS[algorithm]) + " dígitos hexadecimales para " + algorithm.upper())
+    size = selected.stat().st_size
+    if size > MAX_VERIFY_FILE:
+        raise ValueError("Archivo demasiado grande para la verificación manual (máximo 32 GiB)")
+    actual = digest_file(selected, algorithm)
+    expected = expected.strip().lower()
+    return {"file": str(selected), "algorithm": algorithm, "size": size,
+            "expected": expected, "actual": actual, "matches": actual == expected,
+            "warning": "MD5 no protege frente a colisiones intencionales" if algorithm == "md5" else None}
 
 
 def target_kind(value: str) -> tuple[str, str]:
@@ -182,7 +254,7 @@ def visible_content(body: bytes, content_type: str) -> str:
     return " ".join(text.split())
 
 
-def local_manifest(path: str) -> tuple[str, dict]:
+def local_manifest(path: str, algorithm: str = "sha256") -> tuple[str, dict]:
     """Read-only snapshot. Oversized files use metadata markers, never mislabeled hashes."""
     root = Path(path)
     files = {}
@@ -204,14 +276,10 @@ def local_manifest(path: str) -> tuple[str, dict]:
         if stat.st_size > MAX_LOCAL_FILE:
             marker = "metadata-only:" + str(stat.st_size) + ":" + str(stat.st_mtime_ns)
         else:
-            sha = hashlib.sha256()
-            with current.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                    sha.update(chunk)
-            marker = "sha256:" + sha.hexdigest()
+            marker = algorithm + ":" + digest_file(current, algorithm)
         files[relative] = marker
     encoded = json.dumps(files, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return digest(encoded), files
+    return digest(encoded, algorithm), files
 
 
 class ChangeMonitor:
@@ -226,12 +294,17 @@ class ChangeMonitor:
                   id INTEGER PRIMARY KEY, target TEXT UNIQUE NOT NULL, kind TEXT NOT NULL,
                   interval_seconds INTEGER NOT NULL, last_sha TEXT, last_semantic TEXT,
                   last_sample TEXT, last_manifest TEXT, etag TEXT, modified TEXT,
-                  checked_at TEXT, next_check TEXT, last_state TEXT, last_error TEXT);
+                  checked_at TEXT, next_check TEXT, last_state TEXT, last_error TEXT,
+                  algorithm TEXT NOT NULL DEFAULT 'sha256');
                 CREATE TABLE IF NOT EXISTS events(
                   id INTEGER PRIMARY KEY, target_id INTEGER NOT NULL REFERENCES targets(id) ON DELETE CASCADE,
                   at TEXT NOT NULL, type TEXT NOT NULL, summary TEXT NOT NULL, details TEXT NOT NULL);
                 CREATE INDEX IF NOT EXISTS events_target_id ON events(target_id,id);
             """)
+            # In-place migration: existing SHA-256 reference values remain valid.
+            columns = {row[1] for row in db.execute("PRAGMA table_info(targets)")}
+            if "algorithm" not in columns:
+                db.execute("ALTER TABLE targets ADD COLUMN algorithm TEXT NOT NULL DEFAULT 'sha256'")
 
     def connect(self):
         db = sqlite3.connect(str(self.path), timeout=10)
@@ -240,14 +313,31 @@ class ChangeMonitor:
         db.execute("PRAGMA busy_timeout=10000")
         return db
 
-    def add(self, target: str, interval: int = 300) -> dict:
+    def add(self, target: str, interval: int = 300, algorithm: str = "sha256") -> dict:
         kind, normalized = target_kind(target)
+        new_hasher(algorithm)  # Reject unavailable BLAKE3 before persisting any changes.
         if isinstance(interval, bool) or not isinstance(interval, int) or not MIN_INTERVAL <= interval <= 86400:
             raise ValueError("Intervalo válido: 60 a 86400 segundos")
         with self.lock, self.connect() as db:
-            db.execute("INSERT OR IGNORE INTO targets(target,kind,interval_seconds,next_check,last_state)"
-                       " VALUES(?,?,?,?,?)", (normalized, kind, interval, now(), "pending"))
-            db.execute("UPDATE targets SET interval_seconds=? WHERE target=?", (interval, normalized))
+            previous = db.execute("SELECT id, algorithm FROM targets WHERE target=?", (normalized,)).fetchone()
+            if previous is None:
+                db.execute("INSERT INTO targets(target,kind,interval_seconds,algorithm,next_check,last_state)"
+                           " VALUES(?,?,?,?,?,?)", (normalized, kind, interval, algorithm, now(), "pending"))
+            elif previous["id"] in self.active:
+                raise ValueError("No se puede cambiar la configuración mientras se está calculando")
+            elif previous["algorithm"] != algorithm:
+                # Never compare hashes generated by different algorithms; create a fresh baseline.
+                db.execute("""
+                    UPDATE targets SET interval_seconds=?, algorithm=?, next_check=?, last_state='pending',
+                      last_sha=NULL, last_semantic=NULL, last_sample=NULL, last_manifest=NULL,
+                      etag=NULL, modified=NULL, checked_at=NULL, last_error=NULL WHERE id=?
+                """, (interval, algorithm, now(), previous["id"]))
+                db.execute("INSERT INTO events(target_id,at,type,summary,details) VALUES(?,?,?,?,?)",
+                           (previous["id"], now(), "algorithm",
+                            "Se cambió el algoritmo; se requiere una nueva referencia",
+                            json.dumps({"from": previous["algorithm"], "to": algorithm})))
+            else:
+                db.execute("UPDATE targets SET interval_seconds=? WHERE id=?", (interval, previous["id"]))
             row = db.execute("SELECT * FROM targets WHERE target=?", (normalized,)).fetchone()
             return self._safe(row)
 
@@ -295,6 +385,7 @@ class ChangeMonitor:
         summary = ""
         details = {}
         try:
+            algorithm = previous["algorithm"]
             if previous["kind"] == "web":
                 fetched = fetch_public(previous["target"], previous["etag"], previous["modified"])
                 if fetched["status"] == 304:
@@ -302,9 +393,9 @@ class ChangeMonitor:
                         raise ValueError("304 sin una versión anterior")
                 else:
                     body = fetched["body"]
-                    new_sha = digest(body)
+                    new_sha = digest(body, algorithm)
                     canonical = visible_content(body, fetched["type"])
-                    semantic = digest(canonical.encode("utf-8"))
+                    semantic = digest(canonical.encode("utf-8"), algorithm)
                     sample = canonical[:1600]
                     update = {"last_sha": new_sha, "last_semantic": semantic,
                               "last_sample": sample, "etag": fetched["etag"],
@@ -321,7 +412,7 @@ class ChangeMonitor:
                                    "previous_excerpt": (previous["last_sample"] or "")[:350],
                                    "current_excerpt": sample[:350]}
             else:
-                new_sha, manifest = local_manifest(previous["target"])
+                new_sha, manifest = local_manifest(previous["target"], algorithm)
                 update = {"last_sha": new_sha,
                           "last_manifest": json.dumps(manifest, ensure_ascii=False, sort_keys=True)}
                 if previous["last_sha"] is None:
@@ -353,9 +444,12 @@ class ChangeMonitor:
             db.execute("UPDATE targets SET " + assignments + " WHERE id=?",
                        (*set_fields.values(), target_id))
             if state in ("baseline", "content", "technical", "files", "error"):
+                event_details = dict(details)
+                event_details["algorithm"] = previous["algorithm"]
                 db.execute("INSERT INTO events(target_id,at,type,summary,details) VALUES(?,?,?,?,?)",
-                           (target_id, checked, state, summary, json.dumps(details, ensure_ascii=False)))
-            return {"id": target_id, "state": state, "message": summary, "checked_at": checked,
+                           (target_id, checked, state, summary, json.dumps(event_details, ensure_ascii=False)))
+            return {"id": target_id, "algorithm": previous["algorithm"], "state": state,
+                    "message": summary, "checked_at": checked,
                     "next_check": next_check, "details": details}
 
 
