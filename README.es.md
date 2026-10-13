@@ -397,3 +397,10 @@ Cada objetivo monitoreado puede usar **SHA-256 (predeterminado), SHA-512, MD5 (h
 
 Los objetivos SHA-256 existentes conservan sus huellas previas mientras no cambies manualmente su algoritmo.
 
+### Diffs de texto y atribución Git (optativo)
+
+Para observar qué cambió **además del hash**, activá **Guardar extractos de texto privados para mostrar diffs** al registrar un objetivo. Esta opción es **desactivada por defecto** por privacidad. Engineer almacena extractos limitados de texto en `.private/change-monitor.sqlite`, fuera del repositorio, y presenta diferencias de líneas agregadas/eliminadas en el historial. Se excluyen archivos típicamente sensibles como `.env`, llaves, bases de datos y archivos binarios. El almacenamiento es limitado (hasta 60 archivos de 8 KiB y 160 KiB por captura); para archivos grandes o fuera de la selección solo se informan hashes y nombres.
+
+En carpetas Git locales, Engineer busca automáticamente el último commit asociado a los archivos que cambiaron, muestra autor y fecha **declarados en Git**, mensaje y enlace al commit en GitHub cuando `origin` apunta expresamente a `github.com`. Si el archivo tiene cambios locales sin commit, la interfaz marca **sin commit / autor no determinado**, no atribuye la edición al autor anterior. Git permite falsificar metadatos de autor; esto no es un registro forense de identidad ni una auditoría del servidor. La integración actual de GitHub para otras operaciones permanece separada: esta vista no consulta automáticamente diffs remotos ni GitHub Blame.
+
+En una web pública sin acceso al repositorio se pueden mostrar diferencias del **texto recibido por HTTP**, no el autor real de la publicación ni cambios internos del servidor. La primera revisión establece el punto de comparación. Si no hay captura previa o se supera el límite, el detalle del diff puede no estar disponible. Toda la captura es local y se hace solo tras activar la opción.
