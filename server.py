@@ -23,6 +23,7 @@ import webbrowser
 
 from workspace import app_folder, register, list_projects, paths, load
 from api_extensions import get_extension, post_extension
+from change_monitor import background_loop
 from integrations import find_profile
 from resource_controls import Governor
 from engineer import build_index, inside_root
@@ -529,6 +530,8 @@ def main():
         cli.error("Choose a port between 1024 and 65535")
     state = State()
     Handler.state = state
+    threading.Thread(target=background_loop, args=(state.stop_event,),
+                     name="engineer-change-observer", daemon=True).start()
     with ThreadingHTTPServer(("127.0.0.1", args.port), Handler) as http:
         http.daemon_threads = True
         url = f"http://127.0.0.1:{http.server_port}/"
