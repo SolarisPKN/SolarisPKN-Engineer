@@ -37,11 +37,21 @@ class LayoutTests(unittest.TestCase):
         self.assertFalse(parser.closing_errors,parser.closing_errors)
         self.assertFalse(parser.stack,parser.stack)
         self.assertEqual(len(set(parser.ids)),len(parser.ids),"Duplicate HTML element IDs")
-        self.assertEqual(set(parser.tabs),{"projects","logs","integrations","hardware"})
+        self.assertEqual(set(parser.tabs),{"projects","monitor","logs","integrations","hardware"})
         self.assertEqual(set(parser.panes),{"tree","inspect","scope"})
         for name in ("map","tree","tree-only","details","scope","scan","register",
                      "work-layout","toggle-sidebar","focus-map","scan-options"):
             self.assertIn(name,parser.ids)
+
+    def test_monitor_dashboard_structure(self):
+        document=(ROOT/"monitor_dashboard.html").read_text(encoding="utf-8")
+        parser=Structure()
+        parser.feed(document.split("<script>",1)[0])
+        self.assertFalse(parser.closing_errors, parser.closing_errors)
+        self.assertFalse(parser.stack, parser.stack)
+        self.assertEqual(len(set(parser.ids)), len(parser.ids))
+        for name in ("targets", "events", "target", "interval", "add", "feedback"):
+            self.assertIn(name, parser.ids)
 
     def test_visualizer_group_navigation(self):
         document=(ROOT/"visualizer.html").read_text(encoding="utf-8")
