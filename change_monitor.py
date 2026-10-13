@@ -356,9 +356,9 @@ class ChangeMonitor:
                             "Se cambió el algoritmo; se requiere una nueva referencia",
                             json.dumps({"from": previous["algorithm"], "to": algorithm})))
             else:
-                db.execute("UPDATE targets SET interval_seconds=?, record_diffs=?,
+                db.execute("""UPDATE targets SET interval_seconds=?, record_diffs=?,
                     last_texts=CASE WHEN ?=0 THEN NULL ELSE last_texts END
-                    WHERE id=?".replace("\n", " "),
+                    WHERE id=?""",
                     (interval, int(record_diffs), int(record_diffs), previous["id"]))
             row = db.execute("SELECT * FROM targets WHERE target=?", (normalized,)).fetchone()
             return self._safe(row)
