@@ -30,7 +30,7 @@ class GitHubRemoteTests(unittest.TestCase):
         for ref in ("", "../main", "main/../secrets", "a\nb", ".hidden", "-main"):
             with self.assertRaises(ValueError, msg=ref):
                 ref_name(ref)
-        for file in ("../.env", "/etc/passwd", ".git/config", r"..\..\win",
+        for file in ("../.env", "/etc/passwd", r"..\..\win",
                      "src//code.py", "a\nb.py"):
             with self.assertRaises(ValueError, msg=file):
                 file_name(file)
@@ -68,6 +68,7 @@ class GitHubRemoteTests(unittest.TestCase):
             self.assertTrue(fetch.call_args.kwargs["require_auth"])
             variables = fetch.call_args.kwargs["payload"]["variables"]
             self.assertEqual(variables["expr"], "main:src/main.py")
+        self.assertEqual(file_name(".github/workflows/ci.yml"), ".github/workflows/ci.yml")
         with self.assertRaises(ValueError):
             github_blame("SolarisPKN/Engineer", "main", "src/main.py", 1, 121)
 
