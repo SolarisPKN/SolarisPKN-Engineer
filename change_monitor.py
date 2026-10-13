@@ -6,6 +6,7 @@ All observations stay in Engineer/.private/, which is ignored by Git.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from http.client import HTTPConnection, HTTPSConnection
@@ -306,12 +307,18 @@ class ChangeMonitor:
             if "algorithm" not in columns:
                 db.execute("ALTER TABLE targets ADD COLUMN algorithm TEXT NOT NULL DEFAULT 'sha256'")
 
+    @contextmanager
     def connect(self):
+        """Commit/rollback transactions and close the handle on Windows and POSIX."""
         db = sqlite3.connect(str(self.path), timeout=10)
-        db.row_factory = sqlite3.Row
-        db.execute("PRAGMA foreign_keys=ON")
-        db.execute("PRAGMA busy_timeout=10000")
-        return db
+        try:
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA foreign_keys=ON")
+            db.execute("PRAGMA busy_timeout=10000")
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def add(self, target: str, interval: int = 300, algorithm: str = "sha256") -> dict:
         kind, normalized = target_kind(target)
