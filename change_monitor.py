@@ -30,7 +30,7 @@ MAX_FILES = 8000
 MAX_VERIFY_FILE = 32 * 1024 * 1024 * 1024  # 32 GiB, explicitly requested one-off verification only
 ALGORITHMS = {"sha256": 64, "sha512": 128, "blake3": 64, "md5": 32}
 MIN_INTERVAL = 60
-EXCLUDED_DIRS = {".git", ".private", "__pycache__", "node_modules", ".venv"}
+EXCLUDED_DIRS = {".git", ".private", "__pycache__", "node_modules", ".venv", ".venv-engineer-build"}
 
 
 def now() -> str:
