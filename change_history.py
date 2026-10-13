@@ -194,8 +194,11 @@ def local_git_blame(target: str, relative: str, start: int = 1, end: int = 80) -
         raise ValueError("El rango debe ser de 1 a 120 líneas")
     root = Path(target).resolve()
     home = root.parent if root.is_file() else root
-    file = (home / relative).resolve()
-    if not file.is_relative_to(home) or not file.is_file() or file.is_symlink():
+    candidate = home / relative
+    if candidate.is_symlink():
+        raise ValueError("No se siguen enlaces simbólicos")
+    file = candidate.resolve()
+    if not file.is_relative_to(home) or not file.is_file():
         raise ValueError("Archivo fuera del objetivo o inexistente")
     top = _git(home, "rev-parse", "--show-toplevel")
     if not top:
@@ -204,10 +207,10 @@ def local_git_blame(target: str, relative: str, start: int = 1, end: int = 80) -
     if not file.is_relative_to(gitroot):
         raise ValueError("Archivo fuera del repositorio Git")
     rel_git = file.relative_to(gitroot).as_posix()
-    spec = ":(top,literal)" + rel_git
-    # --line-porcelain includes the attribution for every output line.
-    cmd = ["git", "-c", "core.fsmonitor=false", "-C", str(home),
-           "blame", "--line-porcelain", "-L", f"{start},{end}", "--", spec]
+    # git blame accepts an exact path, unlike the pathspec accepted by git log.
+    # Path is resolved inside gitroot and '--' stops option interpretation.
+    cmd = ["git", "-c", "core.fsmonitor=false", "-C", str(gitroot),
+           "blame", "--line-porcelain", "-L", f"{start},{end}", "--", rel_git]
     env = os.environ.copy()
     env.update(GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0",
                GIT_CONFIG_NOSYSTEM="1", GIT_NO_REPLACE_OBJECTS="1")
