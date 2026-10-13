@@ -7,12 +7,14 @@ on:
     paths:
       - change_monitor.py
       - change_history.py
+      - github_provenance.py
       - api_extensions.py
       - server.py
       - monitor_dashboard.html
       - dashboard_v2.html
       - tests/test_change_monitor.py
       - tests/test_change_history.py
+      - tests/test_github_provenance.py
       - .github/workflows/change-observer-tests.yml
   workflow_dispatch:
 
@@ -34,9 +36,11 @@ jobs:
       - name: Install optional BLAKE3 for test matrix
         run: python -m pip install blake3
       - name: Compile affected Python files
-        run: python -m py_compile change_monitor.py change_history.py api_extensions.py server.py tests/test_change_monitor.py tests/test_change_history.py
+        run: python -m py_compile change_monitor.py change_history.py github_provenance.py api_extensions.py server.py tests/test_change_monitor.py tests/test_change_history.py tests/test_github_provenance.py
       - name: Offline change observer unit tests
-        run: python -m unittest discover -s tests -p 'test_change_*.py' -v
+        run: |
+          python -m unittest discover -s tests -p 'test_change_*.py' -v
+          python -m unittest discover -s tests -p 'test_github_provenance.py' -v
       - name: Check dashboard token markers
         run: |
           python - <<'PY'
@@ -47,6 +51,9 @@ jobs:
           assert 'id="algorithm"' in text
           assert 'id="verify-algorithm"' in text
           assert 'id="verify-file"' in text
+          assert 'id="remote-repo"' in text
+          assert 'id="blame-run"' in text
+          assert 'id="github-linked"' in text
           main = Path('dashboard_v2.html').read_text(encoding='utf-8')
           assert 'data-tab="monitor"' in main
           assert 'id="tab-monitor"' in main

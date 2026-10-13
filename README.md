@@ -404,3 +404,13 @@ Select **Save private text excerpts for diffs** when registering a monitor targe
 For local Git working trees, Engineer reports the **last Git commit recorded for the changed file**, its declared author, date and message, and a GitHub commit link only if the configured `origin` is actually `github.com`. For dirty/untracked files it reports **uncommitted: editor unknown**, not the previous committer as the current editor. Git author fields are self-declared and do not prove personal identity. This feature uses local read-only Git commands and does not execute a GitHub API request or support remote GitHub blame yet.
 
 For public websites, the diff covers observed HTTP text, not server internals, client-rendered JavaScript or a verifiable publisher identity. An earlier captured snapshot is needed to compute a full diff; some large files can only have hash-level differences.
+
+### Remote GitHub compare, line blame and deployment correlation
+
+**Remote compare:** In **Change Monitor → GitHub comparer**, enter `owner/repo`, a base branch/SHA and a target branch/SHA. Engineer reads the GitHub REST comparison endpoint and presents changed files, bounded unified text patches, commit messages and declared authors. Binary/large patches may be unavailable; results cap at 40 files and 30 commits. Private repositories require the configured read-only GitHub credential.
+
+**Line-level blame:** Choose a file, ref and a line range (up to 120 lines) to use GitHub GraphQL `Blob.blame.ranges`. This requires a GitHub token with access to the source. Locally registered Git worktrees also support read-only Git blame without network access. Git author metadata is not verified human identity; uncommitted local edits must not be attributed to an earlier commit's author.
+
+**Web-to-deployment evidence:** Optionally associate a monitored **public HTTPS website** with its `owner/repo`. On observed content changes, Engineer queries the GitHub deployments/statuses APIs for successful deployment records whose HTTPS `environment_url` matches the observed site by hostname and base path. This is **reported deployment evidence**, *not a cryptographic content-to-commit attestation* or reliable proof of who updated the live website. If no matching successful record exists, attribution stays unknown. Operator can inspect associated deployment records manually.
+
+Requests are read-only, capped in size/time, TLS-verified, sent only to `api.github.com`, without redirects, credential disclosure or arbitrary URL fetch. Optional site-deployment correlation only happens when the user explicitly links a repository.

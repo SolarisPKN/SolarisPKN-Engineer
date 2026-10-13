@@ -19,6 +19,8 @@ from live_view import status_snapshot
 from language_catalog import status as format_status, refresh_linguist
 from impact_analysis import impact_from_sqlite
 from change_monitor import get_monitor, algorithm_status, verify_local_file
+from github_provenance import github_compare, github_blame, github_deployment_evidence
+from change_history import local_git_blame
 
 
 def get_extension(path, query: dict):
@@ -95,10 +97,36 @@ def get_extension(path, query: dict):
 
 
 def post_extension(path, data: dict):
+    if path == "/api/github/compare":
+        return github_compare(data.get("repository", ""), data.get("base", ""),
+                              data.get("head", ""))
+    if path == "/api/github/blame":
+        return github_blame(data.get("repository", ""), data.get("ref", ""),
+                            data.get("file", ""), data.get("start", 1), data.get("end", 80))
+    if path == "/api/monitor/blame":
+        target_id = data.get("id")
+        if isinstance(target_id, bool) or not isinstance(target_id, int):
+            raise ValueError("ID de objetivo inválido")
+        targets = get_monitor().targets()
+        matches = [item for item in targets if item["id"] == target_id and item["kind"] == "local"]
+        if not matches:
+            raise ValueError("Seleccioná un objetivo local registrado")
+        return local_git_blame(matches[0]["target"], data.get("file", ""),
+                               data.get("start", 1), data.get("end", 80))
+    if path == "/api/monitor/deployments":
+        target_id = data.get("id")
+        if isinstance(target_id, bool) or not isinstance(target_id, int):
+            raise ValueError("ID de objetivo inválido")
+        targets = get_monitor().targets()
+        matches = [item for item in targets if item["id"] == target_id and
+                   item["kind"] == "web" and item.get("github_repo")]
+        if not matches:
+            raise ValueError("Registrá una web HTTPS y su repositorio GitHub para ver deployments")
+        return github_deployment_evidence(matches[0]["github_repo"], matches[0]["target"])
     if path == "/api/monitor/add":
         return {"target": get_monitor().add(data.get("target", ""),
                     data.get("interval_seconds", 300), data.get("algorithm", "sha256"),
-                    data.get("record_diffs", False))}
+                    data.get("record_diffs", False), data.get("github_repo", ""))}
     if path == "/api/monitor/verify":
         return verify_local_file(data.get("file", ""), data.get("expected", ""),
                                  data.get("algorithm", "sha256"))

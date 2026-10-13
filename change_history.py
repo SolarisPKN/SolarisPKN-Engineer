@@ -176,3 +176,77 @@ def git_file_history(target: str, paths: list[str], *, limit: int = 12) -> dict:
         entries.append(item)
     return {"available": True, "github_repository": github, "files": entries,
             "notice": "Git guarda autores declarados en commits; no demuestra quién editó un archivo sin commit."}
+
+
+def local_git_blame(target: str, relative: str, start: int = 1, end: int = 80) -> dict:
+    """Line-level blame for one tracked local Git file, no remote requests.
+
+    Current uncommitted lines are explicitly marked as unknown; commit authors
+    are Git metadata and not proof of who physically edited the content.
+    """
+    if (not isinstance(relative, str) or not 1 <= len(relative) <= 400 or
+            relative.startswith("/") or "\\" in relative or
+            any(part in (".", "..", "") for part in relative.split("/"))):
+        raise ValueError("Ruta de archivo inválida")
+    if (isinstance(start, bool) or isinstance(end, bool) or
+            not isinstance(start, int) or not isinstance(end, int) or
+            not 1 <= start <= end or end - start >= 120):
+        raise ValueError("El rango debe ser de 1 a 120 líneas")
+    root = Path(target).resolve()
+    home = root.parent if root.is_file() else root
+    candidate = home / relative
+    if candidate.is_symlink():
+        raise ValueError("No se siguen enlaces simbólicos")
+    file = candidate.resolve()
+    if not file.is_relative_to(home) or not file.is_file():
+        raise ValueError("Archivo fuera del objetivo o inexistente")
+    top = _git(home, "rev-parse", "--show-toplevel")
+    if not top:
+        raise ValueError("Objetivo sin repositorio Git local")
+    gitroot = Path(top).resolve()
+    if not file.is_relative_to(gitroot):
+        raise ValueError("Archivo fuera del repositorio Git")
+    rel_git = file.relative_to(gitroot).as_posix()
+    # git blame accepts an exact path, unlike the pathspec accepted by git log.
+    # Path is resolved inside gitroot and '--' stops option interpretation.
+    cmd = ["git", "-c", "core.fsmonitor=false", "-C", str(gitroot),
+           "blame", "--line-porcelain", "-L", f"{start},{end}", "--", rel_git]
+    env = os.environ.copy()
+    env.update(GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0",
+               GIT_CONFIG_NOSYSTEM="1", GIT_NO_REPLACE_OBJECTS="1")
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=6, check=False, env=env,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ValueError("Git blame local no está disponible") from None
+    if proc.returncode != 0:
+        raise ValueError("Git blame no pudo consultar ese archivo/rango")
+    if len(proc.stdout) > 250_000:
+        raise ValueError("Blame demasiado grande para mostrar")
+    records = []
+    current: dict = {}
+    final_lineno = start
+    for line in proc.stdout.splitlines():
+        match = re.match(r"^([0-9a-f]{40,64})\s+\d+\s+(\d+)(?:\s+\d+)?$", line)
+        if match:
+            current = {"sha": match.group(1), "line": int(match.group(2))}
+            final_lineno = current["line"]
+        elif line.startswith("author "):
+            current["author"] = line[7:][:120]
+        elif line.startswith("author-time "):
+            current["authored_at_unix"] = int(line[12:]) if line[12:].isdigit() else None
+        elif line.startswith("summary "):
+            current["summary"] = line[8:][:160]
+        elif line.startswith("\t"):
+            sha = current.get("sha") or ""
+            uncommitted = bool(re.fullmatch(r"0+", sha)) or current.get("author") in ("Not Committed Yet", "Not Committed")
+            records.append({"line": final_lineno, "text": line[1:][:500],
+                            "sha": None if uncommitted else sha,
+                            "author": None if uncommitted else current.get("author"),
+                            "date_unix": current.get("authored_at_unix"),
+                            "message": current.get("summary"), "uncommitted": uncommitted})
+        if len(records) >= 120:
+            break
+    return {"path": relative, "lines": records, "source": "git blame --line-porcelain",
+            "note": "La información procede de Git local; líneas sin commit no tienen autor verificado."}
