@@ -114,7 +114,7 @@ nav button.nav{padding:9px}
 }
 </style></head><body>
 <header><button id="toggle-nav" class="header-icon" title="Mostrar/ocultar menú principal" aria-label="Menú principal">☰</button><strong>✦ SolarisPKN-Engineer</strong><small>Analizador de arquitectura</small><span class="push tag" id="job-label">Local</span><button id="toggle-sidebar" class="header-icon" title="Mostrar/ocultar panel lateral">◧ Panel</button></header>
-<div class="layout" id="work-layout"><nav id="primary-nav"><h3>Navegación</h3><button class="nav active" data-tab="projects">▣ Explorador</button><button class="nav" data-tab="logs">≡ Registro de actividad</button><button class="nav" data-tab="integrations">◇ Integraciones</button><button class="nav" data-tab="hardware">⚙ Hardware y rendimiento</button><hr><h3>Proyectos</h3><div id="project-list"></div><p class="notice">Datos persistentes en <b>Engineer/proyectos/</b>. Los originales permanecen intactos.</p></nav>
+<div class="layout" id="work-layout"><nav id="primary-nav"><h3>Navegación</h3><button class="nav active" data-tab="projects">▣ Explorador</button><button class="nav" data-tab="monitor">◉ Monitor SHA-256</button><button class="nav" data-tab="logs">≡ Registro de actividad</button><button class="nav" data-tab="integrations">◇ Integraciones</button><button class="nav" data-tab="hardware">⚙ Hardware y rendimiento</button><hr><h3>Proyectos</h3><div id="project-list"></div><p class="notice">Datos persistentes en <b>Engineer/proyectos/</b>. Los originales permanecen intactos.</p></nav>
 <main>
 <section id="tab-projects" class="tab">
 <div id="project-controls">
@@ -129,7 +129,7 @@ nav button.nav{padding:9px}
 </div>
 <div id="map-wrap"><iframe id="map" sandbox="allow-scripts" title="Grafo de dependencias"></iframe></div>
 <div id="tree-only"></div>
-</section><section id="tab-logs" class="tab hidden"><h2>Registro de actividad</h2><p class="muted">Historial del análisis en curso, errores y tareas realizadas. Se actualiza junto con el panel.</p><div id="log"><pre id="log-text">Sin análisis todavía.</pre></div>
+</section><section id="tab-monitor" class="tab hidden" style="padding:0;overflow:hidden"><iframe src="/monitor" title="Monitor de cambios SHA-256" style="width:100%;height:100%;border:0;background:#090e19"></iframe></section><section id="tab-logs" class="tab hidden"><h2>Registro de actividad</h2><p class="muted">Historial del análisis en curso, errores y tareas realizadas. Se actualiza junto con el panel.</p><div id="log"><pre id="log-text">Sin análisis todavía.</pre></div>
 </section>
 <section id="tab-integrations" class="tab hidden">
 <h2>Integraciones</h2><p class="muted">Las conexiones de IA se configuran aquí y se eligen después en Proyectos. Las claves se consultan desde variables de entorno, nunca se guardan en JSON.</p>
@@ -223,7 +223,7 @@ document.addEventListener("keydown",e=>{
  }
 });
 
-function chooseTab(tab){for(const t of ["projects","logs","integrations","hardware"])$("tab-"+t).classList.toggle("hidden",tab!==t);
+function chooseTab(tab){for(const t of ["projects","monitor","logs","integrations","hardware"])$("tab-"+t).classList.toggle("hidden",tab!==t);
  for(const b of document.querySelectorAll("[data-tab]"))b.classList.toggle("active",b.dataset.tab===tab);
  if(tab==="integrations")loadIntegrations();if(tab==="hardware")loadHardware();}
 document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>chooseTab(b.dataset.tab));
