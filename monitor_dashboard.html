@@ -19,6 +19,11 @@ label{display:block;font-size:12px;color:var(--muted);margin:10px 0 5px;font-wei
 .state.baseline{background:#215344;color:#bdeed8}.state.error{background:#652d39;color:#ffced4}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.5 Consolas,monospace;padding:10px;border-radius:6px;background:#0a1522;max-height:230px;overflow:auto}
 .notice{font-size:12px;line-height:1.6;background:#1a3047;padding:10px;border-radius:8px}
+.diff-lines{overflow:auto;max-height:300px;background:#0a1522;border-radius:6px;margin:10px 0}
+.diff-line{font:11px/1.5 Consolas,monospace;white-space:pre;min-width:max-content;padding:0 8px}
+.diff-line.added{color:#b6efd2;background:#143629}.diff-line.deleted{color:#ffd2d5;background:#421b27}
+.diff-line.meta{color:#a5bddc}.commit-link{color:#91d7e8;overflow-wrap:anywhere}
+.event details{margin-top:9px}.event summary{cursor:pointer;color:#bee6ea}
 #feedback,#verify-result{min-height:22px;color:var(--accent)}
 #verify-result pre{max-height:none}
 #verify-result.error{color:#ffb9be}
@@ -41,6 +46,11 @@ code{color:#b4eedc}.empty{padding:20px 5px}
   <option value="md5">MD5 · solo compatibilidad heredada</option>
  </select>
  <p id="algorithm-hint" style="font-size:12px">SHA-256 es el valor predeterminado recomendado.</p>
+ <label style="display:flex;gap:9px;align-items:start;margin-top:14px">
+  <input type="checkbox" id="record-diffs" style="width:auto;margin-top:3px">
+  <span>Guardar extractos de texto privados para mostrar diffs (opcional)</span>
+ </label>
+ <p class="muted" style="font-size:11px">Al activarlo se almacenan fragmentos del código o texto web en la base local .private, excluida de Git. No actives esto en carpetas con información sensible. Hasta 60 archivos de texto pequeños por objetivo.</p>
  <label for="interval">Intervalo entre revisiones</label>
  <select id="interval">
   <option value="60">Cada minuto</option><option value="300" selected>Cada 5 minutos</option>
@@ -111,6 +121,7 @@ function makeTarget(t){
   "\nÚltima revisión: "+dateText(t.checked_at)+
   "\nPróxima: "+dateText(t.next_check)+
   "\nFrecuencia: "+t.interval_seconds+" segundos"+
+  "\nDifferences: "+(t.record_diffs?"diffs de texto habilitados":"solo hashes")+
   (t.last_error?"\nError: "+t.last_error:"");
  details.style.whiteSpace="pre-line";card.append(details);
  const actions=element("div",undefined,"row");
@@ -133,16 +144,63 @@ function makeTarget(t){
  };
  actions.append(check,remove);card.append(actions);return card;
 }
+function renderPatch(patch){
+ const wrap=element("div",undefined,"diff-lines");
+ for(const line of patch.split("\n")){
+  const type=line.startsWith("+")&&!line.startsWith("+++")?"added":
+             line.startsWith("-")&&!line.startsWith("---")?"deleted":"meta";
+  wrap.append(element("div",line,type+" diff-line"));
+ }
+ return wrap;
+}
 function makeEvent(e){
  const card=element("div",undefined,"event");
- const title=element("div");
- title.append(element("b",e.summary));
- card.append(title);
+ card.append(element("b",e.summary));
  card.append(element("small",dateText(e.at)+" · "+e.type));
  card.append(element("div",e.target,"name"));
- try{const detail=JSON.parse(e.details);
-  if(detail&&Object.keys(detail).length)card.append(element("pre",JSON.stringify(detail,null,2)));
- }catch(error){ /* Incomplete history details are ignored, never interpreted as HTML. */ }
+ try{
+  const detail=JSON.parse(e.details);
+  if(!detail||!Object.keys(detail).length)return card;
+  const fold=element("details");
+  fold.append(element("summary","Ver diferencias y datos del cambio"));
+  if(detail.counts){
+   fold.append(element("p","Archivos: +"+detail.counts.added+
+     " / -"+detail.counts.removed+" / modificados "+detail.counts.modified));
+  }
+  if(detail.diff)fold.append(renderPatch(detail.diff));
+  if(Array.isArray(detail.diffs)){
+   for(const entry of detail.diffs){
+    fold.append(element("b",entry.file));
+    fold.append(renderPatch(entry.patch));
+   }
+  }
+  if(detail.git?.available){
+   fold.append(element("h3","Historial Git asociado a archivos detectados"));
+   for(const f of (detail.git.files||[])){
+    const section=element("div",undefined,"target");
+    section.append(element("div",f.path,"name"));
+    if(f.attribution==="uncommitted")
+     section.append(element("p","⚠ Cambios locales sin commit: no se puede identificar al editor."));
+    else if(f.last_commit){
+     const git=f.last_commit;
+     section.append(element("small","Último autor registrado por Git: "+git.author+
+        " · "+git.authored_at+" · "+git.message));
+     section.append(element("small","Commit: "+git.sha));
+     if(git.url){
+      const link=element("a","Ver commit en GitHub","commit-link");
+      link.href=git.url;link.target="_blank";link.rel="noopener noreferrer";
+      section.append(link);
+     }
+    }else section.append(element("small","No hay atribución Git disponible."));
+    fold.append(section);
+   }
+   fold.append(element("p",detail.git.notice||"El autor del commit no prueba quién editó el archivo."));
+  }else if(detail.git)fold.append(element("p",detail.git.reason||"Sin historial Git"));
+  if(detail.diff_note)fold.append(element("p",detail.diff_note));
+  if(!(detail.diff||detail.diffs?.length||detail.git))
+    fold.append(element("pre",JSON.stringify(detail,null,2)));
+  card.append(fold);
+ }catch(error){card.append(element("small","No se pudieron interpretar los detalles."));}
  return card;
 }
 let refreshing=false;
@@ -198,7 +256,8 @@ $("add").onclick=async()=>{
  const button=$("add");button.disabled=true;info("Registrando objetivo...");
  try{
   await api("/api/monitor/add",{target:$("target").value.trim(),
-    interval_seconds:Number($("interval").value),algorithm:$("algorithm").value});
+    interval_seconds:Number($("interval").value),algorithm:$("algorithm").value,
+    record_diffs:$("record-diffs").checked});
   info("Registrado. Se tomará una primera referencia automáticamente; también podés comprobarlo ahora.");
   $("target").value="";
   await refresh();
