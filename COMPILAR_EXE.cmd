@@ -48,7 +48,7 @@ echo Version de PyInstaller:
 if errorlevel 1 goto :build_error
 
 echo [4/4] Compilando SolarisPKN-Engineer...
-"%BUILD_PY%" -m PyInstaller --noconfirm --clean --onefile --noconsole --name "SolarisPKN-Engineer" --distpath "." --workpath ".build" --specpath ".build" --hidden-import "blake3" --add-data "dashboard_v2.html;." --add-data "monitor_dashboard.html;." --add-data "visualizer.html;." "tray_launcher.py"
+"%BUILD_PY%" -m PyInstaller --noconfirm --clean --onefile --noconsole --name "SolarisPKN-Engineer" --distpath "." --workpath ".build" --specpath ".build" --hidden-import "blake3" --add-data "%CD%\dashboard_v2.html;." --add-data "%CD%\monitor_dashboard.html;." --add-data "%CD%\visualizer.html;." "tray_launcher.py"
 if errorlevel 1 goto :build_error
 
 if not exist "SolarisPKN-Engineer.exe" (
