@@ -6,6 +6,10 @@ on:
       - .github/workflows/windows-exe-smoke.yml
       - .gitignore
       - change_monitor.py
+      - github_provenance.py
+      - change_history.py
+      - api_extensions.py
+      - monitor_dashboard.html
       - tray_launcher.py
       - tests/test_tray.py
   push:
