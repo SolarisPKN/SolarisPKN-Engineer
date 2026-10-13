@@ -185,7 +185,7 @@ def local_git_blame(target: str, relative: str, start: int = 1, end: int = 80) -
     are Git metadata and not proof of who physically edited the content.
     """
     if (not isinstance(relative, str) or not 1 <= len(relative) <= 400 or
-            relative.startswith(("/", ".")) or "\\" in relative or
+            relative.startswith("/") or "\\" in relative or
             any(part in (".", "..", "") for part in relative.split("/"))):
         raise ValueError("Ruta de archivo inválida")
     if (isinstance(start, bool) or isinstance(end, bool) or
