@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Engineer · Monitor de cambios</title>
+<title>Engineer · Monitor de cambios y verificación</title>
 <style>
 :root{color-scheme:dark;--bg:#090e19;--panel:#142238;--line:#344a65;--text:#e5eefb;--muted:#a2b6d0;--accent:#73e3d3}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,Segoe UI,sans-serif}
@@ -19,17 +19,28 @@ label{display:block;font-size:12px;color:var(--muted);margin:10px 0 5px;font-wei
 .state.baseline{background:#215344;color:#bdeed8}.state.error{background:#652d39;color:#ffced4}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.5 Consolas,monospace;padding:10px;border-radius:6px;background:#0a1522;max-height:230px;overflow:auto}
 .notice{font-size:12px;line-height:1.6;background:#1a3047;padding:10px;border-radius:8px}
-#feedback{min-height:22px;color:var(--accent)}.empty{padding:20px 5px}
+#feedback,#verify-result{min-height:22px;color:var(--accent)}
+#verify-result pre{max-height:none}
+#verify-result.error{color:#ffb9be}
+code{color:#b4eedc}.empty{padding:20px 5px}
 @media(max-width:790px){main{padding:12px}.columns{grid-template-columns:1fr}}
 </style></head>
 <body><main>
-<h1>◉ Monitor de cambios · SHA-256</h1>
-<p>Para repositorios y carpetas locales o páginas web públicas. Guarda el historial exclusivamente en <code>Engineer/.private/change-monitor.sqlite</code>. Las comprobaciones automáticas funcionan mientras Engineer esté ejecutándose.</p>
+<h1>◉ Monitor de cambios · múltiples algoritmos</h1>
+<p>Para repositorios y carpetas locales o páginas web públicas, con MD5, SHA-256, SHA-512 y BLAKE3. Guarda el historial exclusivamente en <code>Engineer/.private/change-monitor.sqlite</code>. Las comprobaciones automáticas funcionan mientras Engineer esté ejecutándose.</p>
 <div class="columns">
 <section class="card">
  <h2>Nuevo objetivo</h2>
  <label for="target">URL pública o ruta de repositorio local</label>
  <input id="target" spellcheck="false" placeholder="https://ejemplo.com/ o D:\GitHub\MiRepo">
+ <label for="algorithm">Algoritmo para este objetivo</label>
+ <select id="algorithm">
+  <option value="sha256" selected>SHA-256 · compatible y seguro (predeterminado)</option>
+  <option value="sha512">SHA-512 · mayor longitud de huella</option>
+  <option value="blake3">BLAKE3 · rápido (requiere módulo opcional)</option>
+  <option value="md5">MD5 · solo compatibilidad heredada</option>
+ </select>
+ <p id="algorithm-hint" style="font-size:12px">SHA-256 es el valor predeterminado recomendado.</p>
  <label for="interval">Intervalo entre revisiones</label>
  <select id="interval">
   <option value="60">Cada minuto</option><option value="300" selected>Cada 5 minutos</option>
@@ -38,8 +49,25 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.5 Consolas,monospace
  </select>
  <button id="add" class="primary" style="width:100%;margin-top:16px">+ Iniciar monitorización</button>
  <p id="feedback" role="status" aria-live="polite"></p>
- <div class="notice">El primer análisis guarda una referencia de comparación. Las siguientes revisiones detectan cambios mediante SHA-256. Las webs se consultan sin credenciales y no se siguen redirecciones; un recurso limitado o privado puede dar error. HTML generado por JavaScript o CSS/JS externos requieren inspección independiente.</div>
+ <div class="notice">La primera lectura crea una referencia. Si cambiás el algoritmo de un objetivo existente, Engineer restablece esa referencia para evitar comparaciones entre hashes incompatibles. MD5 es solo para interoperabilidad heredada: no ofrece protección fiable contra manipulaciones deliberadas. Las consultas web no siguen redirecciones ni ejecutan JavaScript.</div>
  <p style="font-size:12px">Límites: 1 MB de respuesta web, 8000 archivos por carpeta y 32 MB por archivo (los mayores se revisan solo por metadatos). No descarga ni ejecuta software observado.</p>
+ <hr style="border:0;border-top:1px solid var(--line);margin:20px 0">
+ <h2>💿 Comprobar ISO o archivo descargado</h2>
+ <p>Compará un archivo local con la huella publicada por su proveedor, incluso si pesa varios GB. Se lee por bloques y no se sube.</p>
+ <label for="verify-file">Ruta completa al archivo</label>
+ <input id="verify-file" spellcheck="false" placeholder="D:\Descargas\Windows.iso">
+ <label for="verify-algorithm">Algoritmo publicado</label>
+ <select id="verify-algorithm">
+  <option value="sha256" selected>SHA-256</option>
+  <option value="sha512">SHA-512</option>
+  <option value="blake3">BLAKE3</option>
+  <option value="md5">MD5 (legado)</option>
+ </select>
+ <label for="verify-expected">Hash esperado, copiado del proveedor</label>
+ <input id="verify-expected" spellcheck="false" autocomplete="off" placeholder="Pegar cadena hexadecimal">
+ <button id="verify" style="width:100%;margin-top:12px">🔎 Calcular y comparar</button>
+ <div id="verify-result" role="status" aria-live="polite"></div>
+ <p class="muted" style="font-size:12px">Si el hash coincide, tenés igualdad respecto de ese valor. Para confirmar autenticidad, obtené el hash de una fuente confiable. MD5 es vulnerable a colisiones deliberadas.</p>
 </section>
 <section>
  <div class="card"><div class="row"><h2>Objetivos monitorizados</h2><button class="push" id="refresh">↻ Actualizar</button></div>
@@ -79,7 +107,7 @@ function makeTarget(t){
  state.classList.add("push");header.append(state);card.append(header);
  card.append(element("div",t.target,"name"));
  const details=element("small");
- details.textContent="SHA-256: "+(t.last_sha||"Aún sin referencia")+
+ details.textContent=(t.algorithm||"sha256").toUpperCase()+": "+(t.last_sha||"Aún sin referencia")+
   "\nÚltima revisión: "+dateText(t.checked_at)+
   "\nPróxima: "+dateText(t.next_check)+
   "\nFrecuencia: "+t.interval_seconds+" segundos"+
@@ -131,11 +159,46 @@ async function refresh(){
  }catch(error){info("Error consultando el monitor: "+error.message);}
  finally{refreshing=false;}
 }
+async function loadAlgorithms(){
+ try{
+  const state=await api("/api/monitor/algorithms");
+  for(const selectId of ["algorithm","verify-algorithm"]){
+   const element=$(selectId);
+   for(const option of element.options){
+    const capability=state.algorithms.find(a=>a.id===option.value);
+    option.disabled=!capability?.available;
+    if(option.value==="blake3"&&!capability?.available)
+     option.textContent="BLAKE3 · instalar con python -m pip install blake3";
+   }
+  }
+ }catch(e){info("No se pudieron consultar algoritmos disponibles: "+e.message);}
+}
+const algoHints={
+ sha256:"SHA-256: interoperabilidad y seguridad criptográfica; recomendado por defecto.",
+ sha512:"SHA-512: digest de 512 bits; compatibilidad con hashes SHA-512 publicados.",
+ blake3:"BLAKE3: alto rendimiento, requiere instalar el paquete opcional 'blake3'.",
+ md5:"⚠ MD5: modo heredado para cotejar sumas publicadas. No sirve para certificar autenticidad frente a ataques."
+};
+$("algorithm").onchange=()=>$("algorithm-hint").textContent=algoHints[$("algorithm").value];
+$("verify").onclick=async()=>{
+ const button=$("verify");
+ const output=$("verify-result");
+ button.disabled=true;output.className="";output.replaceChildren(element("p","Calculando hash del archivo completo…"));
+ try{
+  const result=await api("/api/monitor/verify",
+   {file:$("verify-file").value.trim(),algorithm:$("verify-algorithm").value,expected:$("verify-expected").value.trim()});
+  output.append(element("b",result.matches?"✅ COINCIDE con la huella esperada":"❌ NO COINCIDE: archivo distinto"));
+  output.append(element("pre","Archivo: "+result.file+"\nAlgoritmo: "+result.algorithm.toUpperCase()+
+   "\nTamaño: "+result.size+" bytes\nEsperado: "+result.expected+"\nCalculado: "+result.actual));
+  if(result.warning)output.append(element("p","⚠ "+result.warning));
+ }catch(e){output.className="error";output.replaceChildren(element("p",e.message));}
+ finally{button.disabled=false;}
+};
 $("add").onclick=async()=>{
  const button=$("add");button.disabled=true;info("Registrando objetivo...");
  try{
   await api("/api/monitor/add",{target:$("target").value.trim(),
-    interval_seconds:Number($("interval").value)});
+    interval_seconds:Number($("interval").value),algorithm:$("algorithm").value});
   info("Registrado. Se tomará una primera referencia automáticamente; también podés comprobarlo ahora.");
   $("target").value="";
   await refresh();
@@ -143,6 +206,6 @@ $("add").onclick=async()=>{
  finally{button.disabled=false;}
 };
 $("refresh").onclick=refresh;
-refresh();
+loadAlgorithms();refresh();
 setInterval(()=>{if(!document.hidden)refresh();},15000);
 </script></body></html>
